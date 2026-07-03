@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TablaFix - Comenzi tabla acoperis",
-  description: "Calculator si cereri de oferta pentru tabla de acoperis.",
+  title: "Nicoroof Modern - Acoperisuri metalice",
+  description: "Acoperisuri metalice si accesorii in Calinesti, Arges. Calculator si cereri de oferta.",
 };
 
 export default function RootLayout({
@@ -14,7 +14,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ro">
-      <body>{children}</body>
+      <body>
+        <a
+          className="sr-only z-50 rounded-md bg-white px-4 py-3 text-sm font-semibold text-foreground shadow-soft focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
+          href="#main-content"
+        >
+          Sari la continut
+        </a>
+        {children}
+      </body>
     </html>
   );
 }
