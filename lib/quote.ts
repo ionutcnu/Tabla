@@ -189,8 +189,7 @@ function normalizeAccessory(value: unknown, fallback: CatalogAccessory, index: n
 function normalizeProductCatalog(value: unknown): ProductCatalog {
   const parsed = isRecord(value) ? value : {};
   const parsedSheetProduct = isRecord(parsed.sheetProduct) ? parsed.sheetProduct : {};
-  const parsedAccessories = Array.isArray(parsed.accessories) ? parsed.accessories : [];
-  const accessoriesToNormalize = parsedAccessories.length > 0 ? parsedAccessories : defaultProductCatalog.accessories;
+  const accessoriesToNormalize = Array.isArray(parsed.accessories) ? parsed.accessories : defaultProductCatalog.accessories;
 
   return {
     accessories: accessoriesToNormalize

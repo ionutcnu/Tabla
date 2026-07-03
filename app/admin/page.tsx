@@ -666,7 +666,7 @@ export default function AdminPage() {
         const oldQuantity = request.accessoryQuantities[oldName];
         const oldPriceOverride = request.priceOverrides?.accessoryPrices?.[oldName];
 
-        if (oldQuantity === undefined && !oldPriceOverride) {
+        if (oldQuantity === undefined && oldPriceOverride === undefined) {
           return request;
         }
 
@@ -680,7 +680,7 @@ export default function AdminPage() {
         }
 
         const accessoryPrices = { ...(request.priceOverrides?.accessoryPrices || {}) };
-        if (oldPriceOverride && accessoryPrices[stableKey] === undefined) {
+        if (oldPriceOverride !== undefined && accessoryPrices[stableKey] === undefined) {
           accessoryPrices[stableKey] = oldPriceOverride;
         }
         if (stableKey !== oldName) {
