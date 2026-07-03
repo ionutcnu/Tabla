@@ -4,16 +4,15 @@ import {
   ArrowLeft,
   CheckCircle2,
   FileSpreadsheet,
+  FileText,
   ListChecks,
   Mail,
   PackagePlus,
-  Phone,
   Plus,
   Save,
   Search,
   Send,
   Trash2,
-  UserRound,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -23,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { company, sheetSeries } from "@/lib/offer-data";
 import {
   calculateQuoteTotals,
+  createCatalogAccessoryId,
   createEmptyQuoteRequest,
   defaultProductCatalog,
   getStoredProductCatalog,
@@ -153,7 +153,207 @@ function printWarehouseSheet(request: QuoteRequest, totals: QuoteTotals, catalog
   openGeneratedHtmlTab(buildWarehousePrintHtml(request, totals, catalog));
 }
 
-function openEmailTemplateTab(request: QuoteRequest, subject: string, body: string) {
+function buildOfferPrintHtml(request: QuoteRequest, totals: QuoteTotals, catalog: ProductCatalog) {
+  const profile = sheetSeries[request.seriesKey];
+  const logoUrl = publicAssetUrl("nicoroof-logo.png");
+  const activeSheets = totals.sheetRows.filter((row) => row.quantity > 0);
+  const activeAccessories = totals.systemRows.filter((row) => row.quantity > 0);
+  const issuedAt = new Date().toLocaleDateString("ro-RO", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const rows = [
+    ...activeSheets.map((row) => ({
+      name: `${catalog.sheetProduct.name} ${profile.name} - foaie ${row.length} m (${row.quantity} buc)`,
+      priceWithVat: row.priceWithVat,
+      priceWithoutVat: row.priceWithoutVat,
+      quantity: row.area,
+      unit: catalog.sheetProduct.unit,
+      value: row.value,
+    })),
+    ...activeAccessories.map((row) => ({
+      name: row.name,
+      priceWithVat: row.priceWithVat,
+      priceWithoutVat: row.priceWithoutVat,
+      quantity: row.quantity,
+      unit: row.unit,
+      value: row.value,
+    })),
+  ];
+
+  return `<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <title>Oferta ${escapeHtml(request.id)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #e5e7eb; color: #172026; font-family: Arial, sans-serif; margin: 0; }
+    .toolbar { background: #0f172a; color: white; display: flex; gap: 10px; justify-content: center; padding: 14px; position: sticky; top: 0; z-index: 10; }
+    .toolbar button { background: #0f766e; border: 0; border-radius: 6px; color: white; cursor: pointer; font-weight: 700; min-height: 42px; padding: 0 16px; }
+    .page { background: white; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22); margin: 28px auto; max-width: 960px; min-height: 1120px; padding: 42px; }
+    .header { align-items: start; border-bottom: 3px solid #0f766e; display: grid; gap: 24px; grid-template-columns: 1fr auto; padding-bottom: 24px; }
+    .brand { align-items: center; display: flex; gap: 16px; }
+    .brand img { background: white; border: 1px solid #dbe4ea; border-radius: 8px; height: 76px; object-fit: contain; object-position: center; padding: 7px; width: 76px; }
+    h1 { font-size: 32px; letter-spacing: 0; margin: 0; }
+    h2 { font-size: 17px; margin: 0 0 10px; }
+    .muted { color: #64748b; }
+    .meta { border: 1px solid #dbe4ea; border-radius: 8px; min-width: 240px; padding: 14px; }
+    .meta-row, .total-row { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; }
+    .grid { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; margin-top: 28px; }
+    .box { border: 1px solid #dbe4ea; border-radius: 8px; padding: 16px; }
+    table { border-collapse: collapse; margin-top: 28px; width: 100%; }
+    th, td { border-bottom: 1px solid #e2e8f0; font-size: 13px; padding: 11px 9px; text-align: left; vertical-align: top; }
+    th { background: #f1f5f9; color: #475569; font-size: 11px; text-transform: uppercase; }
+    .right { text-align: right; }
+    .summary { display: grid; gap: 8px; margin: 24px 0 0 auto; max-width: 390px; }
+    .summary .total-row { border-bottom: 1px solid #e2e8f0; padding: 8px 0; }
+    .summary .final { background: #0f766e; border-radius: 8px; color: white; font-size: 20px; font-weight: 800; margin-top: 4px; padding: 14px; }
+    .notes { background: #f8fafc; border: 1px solid #dbe4ea; border-radius: 8px; margin-top: 28px; padding: 16px; }
+    .footer { align-items: end; border-top: 1px solid #dbe4ea; display: grid; gap: 24px; grid-template-columns: 1fr 1fr; margin-top: 42px; padding-top: 18px; }
+    .signature { border-top: 1px solid #172026; padding-top: 8px; text-align: center; }
+    @page { margin: 14mm; size: A4; }
+    @media print {
+      body { background: white; }
+      .toolbar { display: none; }
+      .page { box-shadow: none; margin: 0; max-width: none; min-height: auto; padding: 0; }
+    }
+    @media (max-width: 760px) {
+      .page { margin: 0; min-height: 0; padding: 22px; }
+      .header, .grid, .footer { grid-template-columns: 1fr; }
+      .meta { min-width: 0; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Printeaza / Export PDF</button>
+  </div>
+  <main class="page">
+    <section class="header">
+      <div class="brand">
+        <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(company.name)}" />
+        <div>
+          <h1>Oferta comerciala</h1>
+          <div class="muted">${escapeHtml(company.name)} | ${escapeHtml(company.phone)} | ${escapeHtml(company.email)}</div>
+          <div class="muted">${escapeHtml(company.address)}</div>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="meta-row"><span>Oferta</span><strong>${escapeHtml(request.id)}</strong></div>
+        <div class="meta-row"><span>Data</span><strong>${issuedAt}</strong></div>
+        <div class="meta-row"><span>Status</span><strong>${escapeHtml(request.status)}</strong></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="box">
+        <h2>Furnizor</h2>
+        <strong>${escapeHtml(company.name)}</strong><br />
+        CUI: ${escapeHtml(company.fiscalCode)}<br />
+        ${escapeHtml(company.address)}<br />
+        ${escapeHtml(company.phone)}<br />
+        ${escapeHtml(company.email)}
+      </div>
+      <div class="box">
+        <h2>Client</h2>
+        <strong>${escapeHtml(request.customer.name || "-")}</strong><br />
+        Telefon: ${escapeHtml(request.customer.phone || "-")}<br />
+        Email: ${escapeHtml(request.customer.email || "-")}<br />
+        Adresa lucrare: ${escapeHtml(request.customer.address || "-")}<br />
+        Montaj: ${request.customer.wantsInstallation ? "Da" : "Nu"}
+      </div>
+    </section>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Produs / serviciu</th>
+          <th class="right">Cantitate</th>
+          <th>UM</th>
+          <th class="right">Pret fara TVA</th>
+          <th class="right">Pret cu TVA</th>
+          <th class="right">Valoare</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${
+          rows.length > 0
+            ? rows
+                .map(
+                  (row, index) => `<tr>
+            <td>${index + 1}</td>
+            <td><strong>${escapeHtml(row.name)}</strong></td>
+            <td class="right">${money(row.quantity)}</td>
+            <td>${escapeHtml(row.unit)}</td>
+            <td class="right">${money(row.priceWithoutVat)} lei</td>
+            <td class="right">${money(row.priceWithVat)} lei</td>
+            <td class="right"><strong>${money(row.value)} lei</strong></td>
+          </tr>`,
+                )
+                .join("")
+            : `<tr><td colspan="7">Nu exista produse in oferta.</td></tr>`
+        }
+      </tbody>
+    </table>
+
+    <section class="summary">
+      <div class="total-row"><span>Tigla metalica</span><strong>${money(totals.tileValue)} lei</strong></div>
+      <div class="total-row"><span>Discount tigla</span><strong>${request.tileDiscount}%</strong></div>
+      <div class="total-row"><span>Accesorii si sistem pluvial</span><strong>${money(totals.systemValue)} lei</strong></div>
+      <div class="total-row"><span>Discount sistem</span><strong>${request.systemDiscount}%</strong></div>
+      <div class="total-row"><span>Manopera</span><strong>${money(request.labor)} lei</strong></div>
+      <div class="total-row final"><span>Total oferta</span><strong>${money(totals.totalWithLabor)} lei</strong></div>
+    </section>
+
+    <section class="notes">
+      <h2>Conditii oferta</h2>
+      <p class="muted">Oferta este estimativa si se confirma in functie de disponibilitate, culoare, transport si masuratorile finale. Preturile sunt exprimate in lei si includ TVA.</p>
+      <p><strong>Observatii client:</strong> ${escapeHtml(request.customer.notes || "Fara observatii.")}</p>
+    </section>
+
+    <section class="footer">
+      <div class="muted">Pentru confirmare sau detalii: ${escapeHtml(company.phone)} | ${escapeHtml(company.email)}</div>
+      <div class="signature">Semnatura / stampila</div>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function printOfferSheet(request: QuoteRequest, totals: QuoteTotals, catalog: ProductCatalog) {
+  openGeneratedHtmlTab(buildOfferPrintHtml(request, totals, catalog));
+}
+
+function openEmailTemplateTab(request: QuoteRequest, subject: string, body: string, totals: QuoteTotals, catalog: ProductCatalog) {
+  const profile = sheetSeries[request.seriesKey];
+  const logoUrl = publicAssetUrl("nicoroof-logo.png");
+  const activeSheets = totals.sheetRows.filter((row) => row.quantity > 0);
+  const activeAccessories = totals.systemRows.filter((row) => row.quantity > 0);
+  const issuedAt = new Date().toLocaleDateString("ro-RO", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+  const rows = [
+    ...activeSheets.map((row) => ({
+      name: `${catalog.sheetProduct.name} ${profile.name} - foaie ${row.length} m`,
+      priceWithVat: row.priceWithVat,
+      quantity: row.area,
+      unit: catalog.sheetProduct.unit,
+      value: row.value,
+    })),
+    ...activeAccessories.map((row) => ({
+      name: row.name,
+      priceWithVat: row.priceWithVat,
+      quantity: row.quantity,
+      unit: row.unit,
+      value: row.value,
+    })),
+  ];
   const to = request.customer.email || "";
   const escapedTo = escapeHtml(to);
   const escapedSubject = escapeHtml(subject);
@@ -166,47 +366,192 @@ function openEmailTemplateTab(request: QuoteRequest, subject: string, body: stri
   <title>Raspuns oferta ${escapeHtml(request.id)}</title>
   <style>
     * { box-sizing: border-box; }
-    body { background: #eef2f7; color: #111827; font-family: Arial, sans-serif; margin: 0; }
-    main { margin: 0 auto; max-width: 980px; padding: 28px; }
-    header { background: #0f766e; border-radius: 8px 8px 0 0; color: white; padding: 18px 22px; }
-    section { background: white; border: 1px solid #cbd5e1; border-top: 0; border-radius: 0 0 8px 8px; padding: 22px; }
-    label { color: #475569; display: grid; font-size: 13px; font-weight: 700; gap: 8px; margin-bottom: 16px; }
+    body { background: #dfe7ee; color: #172026; font-family: Arial, sans-serif; margin: 0; }
+    main { margin: 0 auto; max-width: 1200px; padding: 22px; }
+    .topbar { align-items: center; background: #0f766e; border-radius: 8px; color: white; display: flex; justify-content: space-between; gap: 18px; margin: 0 auto 18px; max-width: 1150px; padding: 16px 20px; }
+    .topbar h1 { font-size: 24px; margin: 0; }
+    .topbar p { margin: 5px 0 0; opacity: 0.88; }
+    .layout { align-items: start; display: grid; gap: 18px; grid-template-columns: minmax(0, 794px) 350px; justify-content: center; }
+    .offer-card, .composer { background: white; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 16px 45px rgba(15, 23, 42, 0.12); }
+    .offer-card { min-height: 1040px; padding: 30px; width: 100%; }
+    .composer { padding: 18px; position: sticky; top: 18px; }
+    .offer-header { align-items: start; border-bottom: 3px solid #0f766e; display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) 210px; padding-bottom: 18px; }
+    .brand { align-items: center; display: flex; gap: 12px; min-width: 0; }
+    .brand img { background: white; border: 1px solid #dbe4ea; border-radius: 8px; height: 64px; object-fit: contain; object-position: center; padding: 6px; width: 64px; }
+    h2 { font-size: 24px; margin: 0; }
+    h3 { font-size: 16px; margin: 0 0 10px; }
+    .muted { color: #64748b; }
+    .meta { border: 1px solid #dbe4ea; border-radius: 8px; padding: 10px 12px; }
+    .meta-row, .summary-row { display: flex; justify-content: space-between; gap: 14px; padding: 4px 0; }
+    .grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; margin-top: 18px; }
+    .box { border: 1px solid #dbe4ea; border-radius: 8px; font-size: 13px; line-height: 1.45; padding: 13px; }
+    table { border-collapse: collapse; margin-top: 18px; table-layout: fixed; width: 100%; }
+    th, td { border-bottom: 1px solid #e2e8f0; font-size: 12px; line-height: 1.35; padding: 8px 7px; text-align: left; vertical-align: top; word-break: break-word; }
+    th { background: #f1f5f9; color: #475569; font-size: 11px; text-transform: uppercase; }
+    .right { text-align: right; }
+    .summary { background: #f8fafc; border: 1px solid #dbe4ea; border-radius: 8px; display: grid; gap: 0; margin: 20px 0 0 auto; max-width: 350px; padding: 10px 14px; }
+    .summary-row { border-bottom: 1px solid #e2e8f0; padding: 7px 0; }
+    .summary-row.final { background: #0f766e; border: 0; border-radius: 7px; color: white; font-size: 18px; font-weight: 800; margin-top: 8px; padding: 12px; }
+    .notes { background: #f8fafc; border: 1px solid #dbe4ea; border-radius: 8px; font-size: 13px; line-height: 1.45; margin-top: 18px; padding: 13px; }
+    label { color: #475569; display: grid; font-size: 13px; font-weight: 700; gap: 8px; margin-bottom: 14px; }
     input, textarea { border: 1px solid #cbd5e1; border-radius: 6px; color: #111827; font: inherit; padding: 12px; width: 100%; }
-    textarea { min-height: 420px; resize: vertical; white-space: pre-wrap; }
-    .row { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
-    .actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 18px; }
-    button, a.button { align-items: center; background: #0f766e; border: 0; border-radius: 6px; color: white; cursor: pointer; display: inline-flex; font-weight: 700; min-height: 44px; padding: 0 16px; text-decoration: none; }
+    textarea { min-height: 300px; resize: vertical; white-space: pre-wrap; }
+    .actions { display: grid; gap: 10px; margin-top: 14px; }
+    button { align-items: center; background: #0f766e; border: 0; border-radius: 6px; color: white; cursor: pointer; display: inline-flex; font-weight: 700; justify-content: center; min-height: 44px; padding: 0 16px; text-decoration: none; width: 100%; }
     button.secondary { background: #334155; }
-    .muted { color: #64748b; font-size: 13px; margin-top: 6px; }
-    @media (max-width: 720px) { main { padding: 14px; } .row { grid-template-columns: 1fr; } }
+    button.light { background: white; border: 1px solid #cbd5e1; color: #172026; }
+    .hint { color: #64748b; font-size: 13px; line-height: 1.45; margin-top: 12px; }
+    @page { margin: 14mm; size: A4; }
+    @media print {
+      body { background: white; }
+      main { max-width: none; padding: 0; }
+      .topbar, .composer { display: none; }
+      .layout { display: block; }
+      .offer-card { border: 0; box-shadow: none; min-height: auto; padding: 0; width: auto; }
+      .offer-header { grid-template-columns: minmax(0, 1fr) 190px; }
+      .brand img { height: 56px; width: 56px; }
+      h2 { font-size: 22px; }
+      h3 { font-size: 14px; }
+      .box, .notes { font-size: 11.5px; }
+      th, td { font-size: 10.5px; padding: 5px 6px; }
+      .summary { max-width: 320px; }
+      .summary-row.final { font-size: 16px; }
+    }
+    @media (max-width: 980px) {
+      main { padding: 14px; }
+      .layout, .offer-header, .grid { grid-template-columns: 1fr; }
+      .composer { position: static; }
+      .meta { min-width: 0; }
+      table { display: block; overflow-x: auto; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <header>
-      <h1 style="margin:0;font-size:24px;">Raspuns oferta ${escapeHtml(request.id)}</h1>
-      <p style="margin:6px 0 0;">Template precompletat pentru ${escapeHtml(request.customer.name || "client")}</p>
-    </header>
-    <section>
-      <div class="row">
+    <div class="topbar">
+      <div>
+        <h1>Raspuns oferta ${escapeHtml(request.id)}</h1>
+        <p>Verifica oferta, exporta PDF-ul si trimite mesajul catre client.</p>
+      </div>
+      <strong>${money(totals.totalWithLabor)} lei</strong>
+    </div>
+
+    <div class="layout">
+      <section class="offer-card">
+        <div class="offer-header">
+          <div class="brand">
+            <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(company.name)}" />
+            <div>
+              <h2>Oferta comerciala</h2>
+              <div class="muted">${escapeHtml(company.name)} | ${escapeHtml(company.phone)} | ${escapeHtml(company.email)}</div>
+              <div class="muted">${escapeHtml(company.address)}</div>
+            </div>
+          </div>
+          <div class="meta">
+            <div class="meta-row"><span>Oferta</span><strong>${escapeHtml(request.id)}</strong></div>
+            <div class="meta-row"><span>Data</span><strong>${issuedAt}</strong></div>
+            <div class="meta-row"><span>Profil</span><strong>${escapeHtml(profile.name)}</strong></div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="box">
+            <h3>Furnizor</h3>
+            <strong>${escapeHtml(company.name)}</strong><br />
+            CUI: ${escapeHtml(company.fiscalCode)}<br />
+            ${escapeHtml(company.address)}<br />
+            ${escapeHtml(company.phone)}<br />
+            ${escapeHtml(company.email)}
+          </div>
+          <div class="box">
+            <h3>Client</h3>
+            <strong>${escapeHtml(request.customer.name || "-")}</strong><br />
+            Telefon: ${escapeHtml(request.customer.phone || "-")}<br />
+            Email: ${escapeHtml(request.customer.email || "-")}<br />
+            Adresa lucrare: ${escapeHtml(request.customer.address || "-")}<br />
+            Montaj: ${request.customer.wantsInstallation ? "Da" : "Nu"}
+          </div>
+        </div>
+
+        <table>
+          <colgroup>
+            <col style="width: 38px;" />
+            <col />
+            <col style="width: 86px;" />
+            <col style="width: 54px;" />
+            <col style="width: 92px;" />
+            <col style="width: 104px;" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Produs / serviciu</th>
+              <th class="right">Cantitate</th>
+              <th>UM</th>
+              <th class="right">Pret cu TVA</th>
+              <th class="right">Valoare</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${
+              rows.length > 0
+                ? rows
+                    .map(
+                      (row, index) => `<tr>
+                <td>${index + 1}</td>
+                <td><strong>${escapeHtml(row.name)}</strong></td>
+                <td class="right">${money(row.quantity)}</td>
+                <td>${escapeHtml(row.unit)}</td>
+                <td class="right">${money(row.priceWithVat)} lei</td>
+                <td class="right"><strong>${money(row.value)} lei</strong></td>
+              </tr>`,
+                    )
+                    .join("")
+                : `<tr><td colspan="6">Nu exista produse in oferta.</td></tr>`
+            }
+          </tbody>
+        </table>
+
+        <div class="summary">
+          <div class="summary-row"><span>Tigla metalica</span><strong>${money(totals.tileAfterDiscount)} lei</strong></div>
+          <div class="summary-row"><span>Accesorii si sistem pluvial</span><strong>${money(totals.systemAfterDiscount)} lei</strong></div>
+          <div class="summary-row"><span>Manopera</span><strong>${money(request.labor)} lei</strong></div>
+          <div class="summary-row final"><span>Total oferta</span><strong>${money(totals.totalWithLabor)} lei</strong></div>
+        </div>
+
+        <div class="notes">
+          <h3>Conditii oferta</h3>
+          <p class="muted">Oferta se confirma in functie de disponibilitate, culoare, transport si masuratorile finale. Preturile sunt exprimate in lei si includ TVA.</p>
+        </div>
+      </section>
+
+      <aside class="composer">
         <label>Catre
           <input id="to" type="email" value="${escapedTo}" />
         </label>
         <label>Subiect
           <input id="subject" value="${escapedSubject}" />
         </label>
-      </div>
-      <label>Mesaj
-        <textarea id="body">${escapedBody}</textarea>
-      </label>
-      <p class="muted">Editeaza mesajul aici, apoi deschide reply-ul in clientul de email. Trimiterea reala ramane in aplicatia de email.</p>
-      <div class="actions">
-        <button class="secondary" type="button" onclick="navigator.clipboard && navigator.clipboard.writeText(document.getElementById('body').value)">Copiaza mesaj</button>
-        <button type="button" onclick="reply()">Deschide reply in email</button>
-      </div>
-    </section>
+        <label>Mesaj email
+          <textarea id="body">${escapedBody}</textarea>
+        </label>
+        <div class="actions">
+          <button class="secondary" type="button" onclick="copyMessage()">Copiaza mesaj</button>
+          <button class="light" type="button" onclick="window.print()">Export PDF oferta</button>
+          <button type="button" onclick="reply()">Deschide email</button>
+        </div>
+        <p class="hint">Pentru moment trimiterea se face prin clientul de email. PDF-ul exportat se ataseaza manual.</p>
+      </aside>
+    </div>
   </main>
   <script>
+    async function copyMessage() {
+      const body = document.getElementById('body').value;
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(body);
+      }
+    }
+
     function reply() {
       const to = document.getElementById('to').value;
       const subject = document.getElementById('subject').value;
@@ -238,12 +583,23 @@ function escapeHtml(value: string) {
     .replaceAll('"', "&quot;");
 }
 
+function publicAssetUrl(path: string) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (typeof window === "undefined") {
+    return normalizedPath;
+  }
+
+  return `${window.location.origin}${normalizedPath}`;
+}
+
 export default function AdminPage() {
   const [activeSection, setActiveSection] = useState<AdminSection>("offers");
   const [requests, setRequests] = useState<QuoteRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [productCatalog, setProductCatalog] = useState<ProductCatalog>(defaultProductCatalog);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = getStoredQuoteRequests();
@@ -286,7 +642,8 @@ export default function AdminPage() {
   function updateRequest(id: string, updater: (request: QuoteRequest) => QuoteRequest) {
     setRequests((current) => {
       const next = current.map((request) => (request.id === id ? updater(request) : request));
-      saveStoredQuoteRequests(next);
+      const saveResult = saveStoredQuoteRequests(next);
+      setSaveError(saveResult.ok ? null : saveResult.error);
       return next;
     });
   }
@@ -294,11 +651,60 @@ export default function AdminPage() {
   function updateCatalog(updater: (catalog: ProductCatalog) => ProductCatalog) {
     setProductCatalog((current) => {
       const next = updater(current);
-      saveStoredProductCatalog(next);
+      const saveResult = saveStoredProductCatalog(next);
+      setSaveError(saveResult.ok ? null : saveResult.error);
       return next;
     });
   }
 
+  function migrateAccessoryNameKey(accessoryId: string | undefined, oldName: string) {
+    const stableKey = accessoryId || oldName;
+
+    setRequests((current) => {
+      let changed = false;
+      const next = current.map((request) => {
+        const oldQuantity = request.accessoryQuantities[oldName];
+        const oldPriceOverride = request.priceOverrides?.accessoryPrices?.[oldName];
+
+        if (oldQuantity === undefined && !oldPriceOverride) {
+          return request;
+        }
+
+        changed = true;
+        const accessoryQuantities = { ...request.accessoryQuantities };
+        if (oldQuantity !== undefined && accessoryQuantities[stableKey] === undefined) {
+          accessoryQuantities[stableKey] = oldQuantity;
+        }
+        if (stableKey !== oldName) {
+          delete accessoryQuantities[oldName];
+        }
+
+        const accessoryPrices = { ...(request.priceOverrides?.accessoryPrices || {}) };
+        if (oldPriceOverride && accessoryPrices[stableKey] === undefined) {
+          accessoryPrices[stableKey] = oldPriceOverride;
+        }
+        if (stableKey !== oldName) {
+          delete accessoryPrices[oldName];
+        }
+
+        return {
+          ...request,
+          accessoryQuantities,
+          priceOverrides: {
+            ...(request.priceOverrides || {}),
+            accessoryPrices,
+          },
+        };
+      });
+
+      if (changed) {
+        const saveResult = saveStoredQuoteRequests(next);
+        setSaveError(saveResult.ok ? null : saveResult.error);
+      }
+
+      return next;
+    });
+  }
   return (
     <main className="min-h-screen bg-slate-100 md:grid md:grid-cols-[260px_minmax(0,1fr)]" id="main-content">
       <aside className="border-b bg-white px-5 py-4 md:sticky md:top-0 md:h-screen md:border-b-0 md:border-r md:p-5">
@@ -339,11 +745,11 @@ export default function AdminPage() {
               <h2 className="text-2xl font-bold tracking-normal md:text-4xl">Panou oferte Nicoroof Modern</h2>
               <p className="mt-1 text-sm text-muted-foreground">Cererile, calculele Excel si preturile sunt separate pe pagini.</p>
             </div>
-            {selectedRequest?.customer.email ? (
+            {selectedRequest?.customer.email && selectedTotals ? (
               <Button
                 type="button"
                 onClick={() => {
-                  openEmailTemplateTab(selectedRequest, generatedEmail.subject, generatedEmail.body);
+                  openEmailTemplateTab(selectedRequest, generatedEmail.subject, generatedEmail.body, selectedTotals, productCatalog);
                   updateRequest(selectedRequest.id, (request) => ({ ...request, status: "Ofertata" }));
                 }}
               >
@@ -358,6 +764,12 @@ export default function AdminPage() {
             ) : null}
           </div>
         </header>
+
+        {saveError ? (
+          <div className="border-b border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-900 md:px-8" role="alert">
+            {saveError}
+          </div>
+        ) : null}
 
         {activeSection === "offers" ? (
           <OffersView
@@ -380,7 +792,7 @@ export default function AdminPage() {
           <ExcelView productCatalog={productCatalog} />
         ) : null}
 
-        {activeSection === "products" ? <ProductsView productCatalog={productCatalog} updateCatalog={updateCatalog} /> : null}
+        {activeSection === "products" ? <ProductsView productCatalog={productCatalog} updateCatalog={updateCatalog} onAccessoryRename={migrateAccessoryNameKey} /> : null}
       </section>
     </main>
   );
@@ -525,7 +937,7 @@ function RequestsList({
               </div>
               <div className="mt-4 grid gap-3 text-sm md:grid-cols-4">
                 <Metric label="Foi" value={`${totals.tileArea.toFixed(2)} mp`} />
-                <Metric label="Accesorii" value={`${activeRows(totals.systemRows)} pozitii`} />
+                <Metric label="Accesorii" value={formatArticleCount(activeRows(totals.systemRows))} />
                 <Metric label="Montaj" value={request.customer.wantsInstallation ? "Da" : "Nu"} />
                 <Metric label="Total" value={`${money(totals.totalWithLabor)} lei`} />
               </div>
@@ -556,6 +968,15 @@ function OrderDetailsModal({
   updateRequest: (id: string, updater: (request: QuoteRequest) => QuoteRequest) => void;
   onClose: () => void;
 }) {
+  const [sheetLengthToAdd, setSheetLengthToAdd] = useState("");
+  const [sheetSearch, setSheetSearch] = useState("");
+  const [sheetVisibleCount, setSheetVisibleCount] = useState(20);
+  const [sheetPickerOpen, setSheetPickerOpen] = useState(false);
+  const [accessoryNameToAdd, setAccessoryNameToAdd] = useState("");
+  const [accessorySearch, setAccessorySearch] = useState("");
+  const [accessoryVisibleCount, setAccessoryVisibleCount] = useState(20);
+  const [accessoryPickerOpen, setAccessoryPickerOpen] = useState(false);
+
   if (!open) {
     return null;
   }
@@ -569,18 +990,102 @@ function OrderDetailsModal({
       });
   const profile = sheetSeries[selectedRequest.seriesKey];
   const activeSheetRows = selectedTotals.sheetRows.filter((row) => row.quantity > 0);
-  const activeAccessories = selectedTotals.systemRows.filter((row) => row.quantity > 0);
-  const activeAuxiliaryRows = selectedTotals.auxiliarySheetTables.flatMap((table) =>
-    table.rows.filter((row) => row.quantity > 0).map((row) => ({
-      ...row,
-      tableName: table.name,
-    })),
-  );
-  const activeModuleRows = selectedTotals.moduleRows.filter((row) => row.quantity > 0);
+  const availableSheetRows = selectedTotals.sheetRows.filter((row) => row.quantity === 0);
+  const filteredAvailableSheetRows = availableSheetRows.filter((row) => `Foaie ${row.length} m`.toLowerCase().includes(sheetSearch.toLowerCase()));
+  const visibleAvailableSheetRows = filteredAvailableSheetRows.slice(0, sheetVisibleCount);
+  const selectedSheetLengthToAdd = sheetLengthToAdd || String(filteredAvailableSheetRows[0]?.length || "");
+  const activeAccessoryRows = selectedTotals.systemRows.filter((row) => row.quantity > 0);
+  const availableAccessoryRows = selectedTotals.systemRows.filter((row) => row.quantity === 0);
+  const filteredAvailableAccessoryRows = availableAccessoryRows.filter((row) => row.name.toLowerCase().includes(accessorySearch.toLowerCase()));
+  const visibleAvailableAccessoryRows = filteredAvailableAccessoryRows.slice(0, accessoryVisibleCount);
+  const selectedAccessoryNameToAdd = accessoryNameToAdd || filteredAvailableAccessoryRows[0]?.id || "";
 
   function openReplyTab() {
-    openEmailTemplateTab(selectedRequest, emailSubject, emailBody);
+    openEmailTemplateTab(selectedRequest, emailSubject, emailBody, selectedTotals, productCatalog);
     updateRequest(selectedRequest.id, (request) => ({ ...request, status: "Ofertata" }));
+  }
+
+  function updateCustomer<Key extends keyof QuoteRequest["customer"]>(key: Key, value: QuoteRequest["customer"][Key]) {
+    updateRequest(selectedRequest.id, (request) => ({
+      ...request,
+      customer: {
+        ...request.customer,
+        [key]: value,
+      },
+    }));
+  }
+
+  function updateSheetQuantity(length: number, quantity: number) {
+    updateRequest(selectedRequest.id, (request) => ({
+      ...request,
+      sheetQuantities: {
+        ...request.sheetQuantities,
+        [String(length)]: quantity,
+      },
+    }));
+  }
+
+  function addSheetRow() {
+    const length = Number.parseFloat(selectedSheetLengthToAdd);
+
+    if (!Number.isFinite(length)) {
+      return;
+    }
+
+    updateSheetQuantity(length, 1);
+    setSheetLengthToAdd("");
+    setSheetSearch("");
+    setSheetVisibleCount(20);
+    setSheetPickerOpen(false);
+  }
+
+  function updateSheetPrice(field: "sheetPriceWithoutVat" | "sheetPriceWithVat", value: number) {
+    updateRequest(selectedRequest.id, (request) => ({
+      ...request,
+      priceOverrides: {
+        accessoryPrices: request.priceOverrides?.accessoryPrices || {},
+        ...request.priceOverrides,
+        [field]: value,
+      },
+    }));
+  }
+
+  function updateAccessoryQuantity(id: string, quantity: number) {
+    updateRequest(selectedRequest.id, (request) => ({
+      ...request,
+      accessoryQuantities: {
+        ...request.accessoryQuantities,
+        [id]: quantity,
+      },
+    }));
+  }
+
+  function addAccessoryRow() {
+    if (!selectedAccessoryNameToAdd) {
+      return;
+    }
+
+    updateAccessoryQuantity(selectedAccessoryNameToAdd, 1);
+    setAccessoryNameToAdd("");
+    setAccessorySearch("");
+    setAccessoryVisibleCount(20);
+    setAccessoryPickerOpen(false);
+  }
+
+  function updateAccessoryPrice(id: string, field: "priceWithoutVat" | "priceWithVat", value: number) {
+    updateRequest(selectedRequest.id, (request) => ({
+      ...request,
+      priceOverrides: {
+        ...request.priceOverrides,
+        accessoryPrices: {
+          ...(request.priceOverrides?.accessoryPrices || {}),
+          [id]: {
+            ...(request.priceOverrides?.accessoryPrices?.[id] || {}),
+            [field]: value,
+          },
+        },
+      },
+    }));
   }
 
   return (
@@ -597,9 +1102,23 @@ function OrderDetailsModal({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => printWarehouseSheet(selectedRequest, selectedTotals, productCatalog)}>
+            <Button
+              className="border-slate-300 text-foreground hover:bg-slate-50"
+              type="button"
+              variant="outline"
+              onClick={() => printWarehouseSheet(selectedRequest, selectedTotals, productCatalog)}
+            >
               <FileSpreadsheet className="mr-2 size-4" />
               Fisa depozit
+            </Button>
+            <Button
+              className="border-slate-300 text-foreground hover:bg-slate-50"
+              type="button"
+              variant="outline"
+              onClick={() => printOfferSheet(selectedRequest, selectedTotals, productCatalog)}
+            >
+              <FileText className="mr-2 size-4" />
+              Oferta PDF
             </Button>
             <Button type="button" onClick={openReplyTab}>
               <Send className="mr-2 size-4" />
@@ -622,21 +1141,26 @@ function OrderDetailsModal({
               <section className="rounded-lg border bg-slate-50 p-4">
                 <h3 className="mb-4 font-bold">Date client</h3>
                 <div className="grid gap-4">
-                  <InfoLine icon={<UserRound className="size-4" />} label="Client" value={selectedRequest.customer.name || "-"} />
-                  <InfoLine icon={<Phone className="size-4" />} label="Telefon" value={selectedRequest.customer.phone || "-"} />
-                  <InfoLine icon={<Mail className="size-4" />} label="Email" value={selectedRequest.customer.email || "-"} />
-                  <InfoLine icon={<CheckCircle2 className="size-4" />} label="Montaj" value={selectedRequest.customer.wantsInstallation ? "Da" : "Nu"} />
+                  <TextField label="Client" value={selectedRequest.customer.name} onChange={(value) => updateCustomer("name", value)} />
+                  <TextField label="Telefon" value={selectedRequest.customer.phone} onChange={(value) => updateCustomer("phone", value)} />
+                  <TextField label="Email" value={selectedRequest.customer.email} onChange={(value) => updateCustomer("email", value)} />
+                  <TextField label="Adresa lucrare" value={selectedRequest.customer.address} onChange={(value) => updateCustomer("address", value)} />
+                  <label className="flex items-center gap-3 rounded-md border bg-white p-3 text-sm font-semibold text-foreground">
+                    <input
+                      checked={selectedRequest.customer.wantsInstallation}
+                      className="size-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      type="checkbox"
+                      onChange={(event) => updateCustomer("wantsInstallation", event.target.checked)}
+                    />
+                    Vreau oferta si pentru montaj
+                  </label>
+                  <div className="grid gap-2 text-sm font-semibold text-muted-foreground">
+                    Observatii client
+                    <p className="min-h-24 whitespace-pre-wrap break-words rounded-md border bg-white px-3 py-3 font-normal text-foreground">
+                      {selectedRequest.customer.notes || "Fara observatii."}
+                    </p>
+                  </div>
                   <InfoLine icon={<CheckCircle2 className="size-4" />} label="Data cerere" value={formattedCreatedAt} />
-                </div>
-                <div className="mt-4 grid gap-3 text-sm">
-                  <div>
-                    <span className="block text-muted-foreground">Adresa lucrare</span>
-                    <strong className="block break-words">{selectedRequest.customer.address || "-"}</strong>
-                  </div>
-                  <div>
-                    <span className="block text-muted-foreground">Observatii client</span>
-                    <strong className="block whitespace-pre-wrap break-words">{selectedRequest.customer.notes || "-"}</strong>
-                  </div>
                 </div>
               </section>
 
@@ -683,126 +1207,357 @@ function OrderDetailsModal({
                 </div>
               </section>
 
-              <section className="rounded-lg border bg-white p-4">
-                <h3 className="mb-3 font-bold">Totaluri</h3>
-                <div className="grid gap-3 text-sm">
-                  <Metric label="Tigla metalica" value={`${money(selectedTotals.tileValue)} lei`} />
-                  <Metric label="Rest sistem" value={`${money(selectedTotals.systemValue)} lei`} />
-                  <Metric label="Total fara manopera" value={`${money(selectedTotals.totalWithoutLabor)} lei`} />
-                  <Metric label="Total cu manopera" value={`${money(selectedTotals.totalWithLabor)} lei`} />
-                </div>
-              </section>
             </aside>
 
             <section className="grid min-w-0 gap-5">
               <div className="rounded-lg border bg-white p-4">
                 <h3 className="font-bold">Profil si foi tigla</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {profile.name} | latime utila {profile.usableWidth} m | {productCatalog.sheetProduct.name}
-                </p>
-                {activeSheetRows.length > 0 ? (
-                  <div className="mt-4 overflow-x-auto rounded-md border">
-                    <table className="w-full min-w-[720px] text-left text-sm">
-                      <thead className="bg-slate-50 text-xs uppercase text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2">Dimensiune</th>
-                          <th className="px-3 py-2 text-right">Nr buc</th>
-                          <th className="px-3 py-2 text-right">Mp</th>
-                          <th className="px-3 py-2 text-right">Pret/mp</th>
-                          <th className="px-3 py-2 text-right">Valoare</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeSheetRows.map((row) => (
-                          <tr className="border-t" key={row.length}>
-                            <td className="px-3 py-2 font-semibold">Foaie {row.length} m</td>
-                            <td className="px-3 py-2 text-right">{row.quantity}</td>
-                            <td className="px-3 py-2 text-right">{row.area.toFixed(2)}</td>
-                            <td className="px-3 py-2 text-right">{money(productCatalog.sheetProduct.priceWithVat)}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{money(row.value)}</td>
-                          </tr>
+                <p className="mt-1 text-sm text-muted-foreground">{profile.name}</p>
+                <div className="mt-4 rounded-md border bg-slate-50 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <label className="grid gap-2 text-sm font-semibold text-muted-foreground md:w-72">
+                      Profil tigla
+                      <select
+                        aria-label="Profil tigla pentru rand nou"
+                        className="min-h-10 rounded-md border bg-white px-3 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        name="quote-series-add-row"
+                        value={selectedRequest.seriesKey}
+                        onChange={(event) => {
+                          setSheetLengthToAdd("");
+                          setSheetSearch("");
+                          setSheetVisibleCount(20);
+                          setSheetPickerOpen(false);
+                          updateRequest(selectedRequest.id, (request) => ({
+                            ...request,
+                            seriesKey: event.target.value as SeriesKey,
+                            sheetQuantities: {},
+                          }));
+                        }}
+                      >
+                        {Object.entries(sheetSeries).map(([key, series]) => (
+                          <option key={key} value={key}>
+                            {series.name} - {series.usableWidth} m
+                          </option>
                         ))}
-                      </tbody>
-                    </table>
+                      </select>
+                    </label>
+                    <fieldset
+                      className="relative m-0 grid min-w-0 flex-1 gap-2 border-0 p-0 text-sm font-semibold text-muted-foreground"
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                          setSheetPickerOpen(false);
+                        }
+                      }}
+                    >
+                      <label htmlFor="modal-sheet-search">Adauga foaie tigla</label>
+                      <div className="flex min-h-10 items-center gap-2 rounded-md border bg-white px-3 text-foreground focus-within:ring-2 focus-within:ring-ring">
+                        <Search className="size-4 shrink-0 text-muted-foreground" />
+                        <input
+                          className="w-full bg-transparent outline-none"
+                          disabled={availableSheetRows.length === 0}
+                          id="modal-sheet-search"
+                          placeholder={availableSheetRows.length === 0 ? "Toate foile sunt adaugate" : "Cauta foaie..."}
+                          type="search"
+                          value={sheetSearch}
+                          onChange={(event) => {
+                            setSheetSearch(event.target.value);
+                            setSheetLengthToAdd("");
+                            setSheetVisibleCount(20);
+                            setSheetPickerOpen(true);
+                          }}
+                          onFocus={() => setSheetPickerOpen(true)}
+                        />
+                      </div>
+                      {sheetPickerOpen && availableSheetRows.length > 0 ? (
+                        <div
+                          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-auto rounded-md border bg-white py-1 shadow-soft"
+                          onScroll={(event) => {
+                            const target = event.currentTarget;
+
+                            if (target.scrollTop + target.clientHeight >= target.scrollHeight - 24) {
+                              setSheetVisibleCount((current) => Math.min(current + 20, filteredAvailableSheetRows.length));
+                            }
+                          }}
+                        >
+                          {visibleAvailableSheetRows.length > 0 ? (
+                            visibleAvailableSheetRows.map((row) => (
+                              <button
+                                className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                  selectedSheetLengthToAdd === String(row.length) ? "bg-teal-50 text-primary" : "text-foreground"
+                                }`}
+                                key={row.length}
+                                type="button"
+                                onClick={() => {
+                                  setSheetLengthToAdd(String(row.length));
+                                  setSheetSearch(`Foaie ${row.length} m`);
+                                  setSheetPickerOpen(false);
+                                }}
+                              >
+                                <span className="block font-semibold">Foaie {row.length} m</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {(row.length * profile.usableWidth).toFixed(2)} mp / buc
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-3 text-sm text-muted-foreground">Nu exista rezultate.</div>
+                          )}
+                        </div>
+                      ) : null}
+                    </fieldset>
+                    <Button disabled={!selectedSheetLengthToAdd} type="button" onClick={addSheetRow}>
+                      <Plus className="mr-2 size-4" />
+                      Adauga rand
+                    </Button>
                   </div>
-                ) : (
-                  <p className="mt-3 rounded-md border bg-slate-50 p-4 text-sm text-muted-foreground">Nu sunt foi de tigla selectate.</p>
-                )}
+                </div>
+                <div className="mt-4 overflow-x-auto rounded-md border">
+                  <table className="w-full min-w-[1040px] table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[220px]" />
+                      <col className="w-[120px]" />
+                      <col className="w-[120px]" />
+                      <col className="w-[150px]" />
+                      <col className="w-[150px]" />
+                      <col className="w-[140px]" />
+                      <col className="w-[80px]" />
+                    </colgroup>
+                    <thead className="bg-slate-50 text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">Dimensiune</th>
+                        <th className="px-3 py-2 text-right">Nr buc</th>
+                        <th className="px-3 py-2 text-right">Mp</th>
+                        <th className="px-3 py-2 text-right">Pret fara TVA</th>
+                        <th className="px-3 py-2 text-right">Pret cu TVA</th>
+                        <th className="px-3 py-2 text-right">Valoare</th>
+                        <th className="px-3 py-2 text-right">
+                          <span className="sr-only">Sterge</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeSheetRows.length === 0 ? (
+                        <tr className="border-t">
+                          <td className="px-3 py-4 text-sm text-muted-foreground" colSpan={7}>
+                            Nu sunt foi de tigla in oferta. Adauga un rand nou.
+                          </td>
+                        </tr>
+                      ) : null}
+                      {activeSheetRows.map((row) => (
+                        <tr className="border-t" key={row.length}>
+                          <td className="px-3 py-2 font-semibold">Foaie {row.length} m</td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="min-h-10 w-full rounded-md border bg-white px-3 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              inputMode="numeric"
+                              min={0}
+                              type="number"
+                              value={row.quantity || ""}
+                              onChange={(event) => updateSheetQuantity(row.length, parseNumber(event.target.value))}
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right">{row.area.toFixed(2)}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="min-h-10 w-full rounded-md border bg-white px-3 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              inputMode="decimal"
+                              min={0}
+                              step={0.01}
+                              type="number"
+                              value={row.priceWithoutVat || ""}
+                              onChange={(event) => updateSheetPrice("sheetPriceWithoutVat", parseNumber(event.target.value))}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="min-h-10 w-full rounded-md border bg-white px-3 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              inputMode="decimal"
+                              min={0}
+                              step={0.01}
+                              type="number"
+                              value={row.priceWithVat || ""}
+                              onChange={(event) => updateSheetPrice("sheetPriceWithVat", parseNumber(event.target.value))}
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold">{money(row.value)}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              aria-label={`Sterge foaie ${row.length} m`}
+                              className="ml-auto grid size-10 place-items-center rounded-md border bg-white text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              type="button"
+                              onClick={() => updateSheetQuantity(row.length, 0)}
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               <div className="rounded-lg border bg-white p-4">
-                <h3 className="font-bold">Accesorii comandate</h3>
-                {activeAccessories.length > 0 ? (
-                  <div className="mt-4 overflow-x-auto rounded-md border">
-                    <table className="w-full min-w-[760px] text-left text-sm">
-                      <thead className="bg-slate-50 text-xs uppercase text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2">#</th>
-                          <th className="px-3 py-2">Produs</th>
-                          <th className="px-3 py-2 text-right">Pret fara TVA</th>
-                          <th className="px-3 py-2 text-right">Pret cu TVA</th>
-                          <th className="px-3 py-2 text-right">Cantitate</th>
-                          <th className="px-3 py-2">UM</th>
-                          <th className="px-3 py-2 text-right">Valoare</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeAccessories.map((row, index) => (
-                          <tr className="border-t" key={row.name}>
-                            <td className="px-3 py-2">{index + 1}</td>
-                            <td className="px-3 py-2 font-semibold">{row.name}</td>
-                            <td className="px-3 py-2 text-right">{money(row.priceWithoutVat)}</td>
-                            <td className="px-3 py-2 text-right">{money(row.priceWithVat)}</td>
-                            <td className="px-3 py-2 text-right">{row.quantity}</td>
-                            <td className="px-3 py-2">{row.unit}</td>
-                            <td className="px-3 py-2 text-right font-semibold">{money(row.value)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="mt-3 rounded-md border bg-slate-50 p-4 text-sm text-muted-foreground">Nu sunt accesorii selectate.</p>
-                )}
-              </div>
+                <h3 className="font-bold">Accesorii si sistem pluvial</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Editeaza doar accesoriile adaugate in cerere.</p>
+                <div className="mt-4 rounded-md border bg-slate-50 p-3">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                    <fieldset
+                      className="relative m-0 grid min-w-0 flex-1 gap-2 border-0 p-0 text-sm font-semibold text-muted-foreground"
+                      onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                          setAccessoryPickerOpen(false);
+                        }
+                      }}
+                    >
+                      <label htmlFor="modal-accessory-search">Adauga accesoriu</label>
+                      <div className="flex min-h-10 items-center gap-2 rounded-md border bg-white px-3 text-foreground focus-within:ring-2 focus-within:ring-ring">
+                        <Search className="size-4 shrink-0 text-muted-foreground" />
+                        <input
+                          className="w-full bg-transparent outline-none"
+                          disabled={availableAccessoryRows.length === 0}
+                          id="modal-accessory-search"
+                          placeholder={availableAccessoryRows.length === 0 ? "Toate accesoriile sunt adaugate" : "Cauta accesoriu..."}
+                          type="search"
+                          value={accessorySearch}
+                          onChange={(event) => {
+                            setAccessorySearch(event.target.value);
+                            setAccessoryNameToAdd("");
+                            setAccessoryVisibleCount(20);
+                            setAccessoryPickerOpen(true);
+                          }}
+                          onFocus={() => setAccessoryPickerOpen(true)}
+                        />
+                      </div>
+                      {accessoryPickerOpen && availableAccessoryRows.length > 0 ? (
+                        <div
+                          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-auto rounded-md border bg-white py-1 shadow-soft"
+                          onScroll={(event) => {
+                            const target = event.currentTarget;
 
-              <div className="rounded-lg border bg-white p-4">
-                <h3 className="font-bold">Calcule auxiliare Excel</h3>
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-md border bg-slate-50 p-3">
-                    <h4 className="font-semibold">Calcul tabla</h4>
-                    {activeAuxiliaryRows.length > 0 ? (
-                      <div className="mt-3 grid gap-2 text-sm">
-                        {activeAuxiliaryRows.map((row) => (
-                          <div className="flex justify-between gap-3 rounded-md border bg-white p-2" key={`${row.tableName}-${row.length}`}>
-                            <span className="min-w-0 break-words">
-                              {row.tableName} | {row.length} m x {row.quantity} buc
-                            </span>
-                            <strong>{row.area.toFixed(2)} mp</strong>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-muted-foreground">Fara pozitii completate.</p>
-                    )}
+                            if (target.scrollTop + target.clientHeight >= target.scrollHeight - 24) {
+                              setAccessoryVisibleCount((current) => Math.min(current + 20, filteredAvailableAccessoryRows.length));
+                            }
+                          }}
+                        >
+                          {visibleAvailableAccessoryRows.length > 0 ? (
+                            visibleAvailableAccessoryRows.map((row) => (
+                              <button
+                                className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                  selectedAccessoryNameToAdd === row.id ? "bg-teal-50 text-primary" : "text-foreground"
+                                }`}
+                                key={row.id}
+                                type="button"
+                                onClick={() => {
+                                  setAccessoryNameToAdd(row.id);
+                                  setAccessorySearch(row.name);
+                                  setAccessoryPickerOpen(false);
+                                }}
+                              >
+                                <span className="block font-semibold">{row.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {money(row.priceWithVat)} lei / {row.unit}
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-3 text-sm text-muted-foreground">Nu exista rezultate.</div>
+                          )}
+                        </div>
+                      ) : null}
+                    </fieldset>
+                    <Button disabled={!selectedAccessoryNameToAdd} type="button" onClick={addAccessoryRow}>
+                      <Plus className="mr-2 size-4" />
+                      Adauga accesoriu
+                    </Button>
                   </div>
-                  <div className="rounded-md border bg-slate-50 p-3">
-                    <h4 className="font-semibold">Foaie3</h4>
-                    {activeModuleRows.length > 0 ? (
-                      <div className="mt-3 grid gap-2 text-sm">
-                        {activeModuleRows.map((row) => (
-                          <div className="flex justify-between gap-3 rounded-md border bg-white p-2" key={row.label}>
-                            <span className="min-w-0 break-words">
-                              {row.label} x {row.quantity}
-                            </span>
-                            <strong>{row.area.toFixed(2)} mp</strong>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-muted-foreground">Fara pozitii completate.</p>
-                    )}
-                  </div>
+                </div>
+                <div className="mt-4 max-h-[560px] overflow-auto rounded-md border">
+                  <table className="w-full min-w-[1040px] table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[52px]" />
+                      <col className="w-[330px]" />
+                      <col className="w-[150px]" />
+                      <col className="w-[150px]" />
+                      <col className="w-[140px]" />
+                      <col className="w-[80px]" />
+                      <col className="w-[140px]" />
+                      <col className="w-[80px]" />
+                    </colgroup>
+                    <thead className="sticky top-0 bg-slate-50 text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">#</th>
+                        <th className="px-3 py-2">Produs</th>
+                        <th className="px-3 py-2 text-right">Pret fara TVA</th>
+                        <th className="px-3 py-2 text-right">Pret cu TVA</th>
+                        <th className="px-3 py-2 text-right">Cantitate</th>
+                        <th className="px-3 py-2">UM</th>
+                        <th className="px-3 py-2 text-right">Valoare</th>
+                        <th className="px-3 py-2 text-right">
+                          <span className="sr-only">Sterge</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeAccessoryRows.length === 0 ? (
+                        <tr className="border-t">
+                          <td className="px-3 py-4 text-sm text-muted-foreground" colSpan={8}>
+                            Nu sunt accesorii in oferta. Adauga un accesoriu nou.
+                          </td>
+                        </tr>
+                      ) : null}
+                      {activeAccessoryRows.map((row, index) => (
+                        <tr className="border-t" key={row.id}>
+                          <td className="px-3 py-2 align-middle">{index + 1}</td>
+                          <td className="break-words px-3 py-2 align-middle font-semibold">{row.name}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="min-h-10 w-full rounded-md border bg-white px-3 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              inputMode="decimal"
+                              min={0}
+                              step={0.01}
+                              type="number"
+                              value={row.priceWithoutVat || ""}
+                              onChange={(event) => updateAccessoryPrice(row.id, "priceWithoutVat", parseNumber(event.target.value))}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="min-h-10 w-full rounded-md border bg-white px-3 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              inputMode="decimal"
+                              min={0}
+                              step={0.01}
+                              type="number"
+                              value={row.priceWithVat || ""}
+                              onChange={(event) => updateAccessoryPrice(row.id, "priceWithVat", parseNumber(event.target.value))}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="min-h-10 w-full rounded-md border bg-white px-3 text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              inputMode="decimal"
+                              min={0}
+                              type="number"
+                              value={row.quantity || ""}
+                              onChange={(event) => updateAccessoryQuantity(row.id, parseNumber(event.target.value))}
+                            />
+                          </td>
+                          <td className="px-3 py-2 align-middle">{row.unit}</td>
+                          <td className="px-3 py-2 text-right align-middle font-semibold">{money(row.value)}</td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              aria-label={`Sterge ${row.name}`}
+                              className="ml-auto grid size-10 place-items-center rounded-md border bg-white text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              type="button"
+                              onClick={() => updateAccessoryQuantity(row.id, 0)}
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -810,6 +1565,24 @@ function OrderDetailsModal({
                 <TotalsTable selectedRequest={selectedRequest} selectedTotals={selectedTotals} />
               </div>
             </section>
+          </div>
+          <div className="sticky bottom-4 z-30 mt-5 flex justify-end">
+            <div className="w-full max-w-md rounded-lg border bg-white/95 p-4 shadow-[0_12px_35px_rgba(15,23,42,0.18)] backdrop-blur">
+              <div className="grid gap-2 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-semibold text-muted-foreground">Materiale</span>
+                  <strong>{money(selectedTotals.totalWithoutLabor)} lei</strong>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-semibold text-muted-foreground">Manopera</span>
+                  <strong>{money(selectedRequest.labor)} lei</strong>
+                </div>
+                <div className="flex items-center justify-between gap-4 border-t pt-2">
+                  <span className="font-bold">Total final</span>
+                  <strong className="text-xl text-primary">{money(selectedTotals.totalWithLabor)} lei</strong>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -844,12 +1617,12 @@ function ExcelView({ productCatalog }: { productCatalog: ProductCatalog }) {
     }));
   }
 
-  function updateAccessoryQuantity(name: string, quantity: number) {
+  function updateAccessoryQuantity(id: string, quantity: number) {
     setExcelRequest((current) => ({
       ...current,
       accessoryQuantities: {
         ...current.accessoryQuantities,
-        [name]: quantity,
+        [id]: quantity,
       },
     }));
   }
@@ -1025,7 +1798,7 @@ function ExcelView({ productCatalog }: { productCatalog: ProductCatalog }) {
                   </thead>
                   <tbody>
                     {filteredSystemRows.map((row) => (
-                      <tr className="border-t" key={row.name}>
+                      <tr className="border-t" key={row.id}>
                         <td className="px-3 py-2 font-semibold">{row.name}</td>
                         <td className="px-3 py-2 text-right">{money(row.priceWithoutVat)}</td>
                         <td className="px-3 py-2 text-right">{money(row.priceWithVat)}</td>
@@ -1037,7 +1810,7 @@ function ExcelView({ productCatalog }: { productCatalog: ProductCatalog }) {
                             min={0}
                             type="number"
                             value={row.quantity || ""}
-                            onChange={(event) => updateAccessoryQuantity(row.name, parseNumber(event.target.value))}
+                            onChange={(event) => updateAccessoryQuantity(row.id, parseNumber(event.target.value))}
                           />
                         </td>
                         <td className="px-3 py-2 text-right font-semibold">{money(row.value)}</td>
@@ -1153,9 +1926,11 @@ function ExcelView({ productCatalog }: { productCatalog: ProductCatalog }) {
 function ProductsView({
   productCatalog,
   updateCatalog,
+  onAccessoryRename,
 }: {
   productCatalog: ProductCatalog;
   updateCatalog: (updater: (catalog: ProductCatalog) => ProductCatalog) => void;
+  onAccessoryRename: (accessoryId: string | undefined, oldName: string) => void;
 }) {
   function updateSheet(field: keyof ProductCatalog["sheetProduct"], value: string | number) {
     updateCatalog((catalog) => ({
@@ -1168,6 +1943,11 @@ function ProductsView({
   }
 
   function updateAccessory(index: number, field: keyof CatalogAccessory, value: string | number) {
+    const currentAccessory = productCatalog.accessories[index];
+    if (field === "name" && currentAccessory) {
+      onAccessoryRename(currentAccessory.id, currentAccessory.name);
+    }
+
     updateCatalog((catalog) => ({
       ...catalog,
       accessories: catalog.accessories.map((accessory, currentIndex) =>
@@ -1188,6 +1968,7 @@ function ProductsView({
         ...catalog.accessories,
         {
           description: "",
+          id: createCatalogAccessoryId(),
           name: "Produs nou",
           priceWithoutVat: 0,
           priceWithVat: 0,
@@ -1252,7 +2033,7 @@ function ProductsView({
               </thead>
               <tbody>
                 {productCatalog.accessories.map((accessory, index) => (
-                  <tr className="border-t" key={`${accessory.name}-${index}`}>
+                  <tr className="border-t" key={accessory.id || `${accessory.name}-${index}`}>
                     <td className="px-3 py-3">
                       <input
                         className="min-h-10 w-full rounded-md border bg-white px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1317,7 +2098,11 @@ function activeRows(rows: Array<{ quantity: number }>) {
   return rows.filter((row) => row.quantity > 0).length;
 }
 
-function ExcelSheetsPanel({ productCatalog, selectedTotals }: { productCatalog: ProductCatalog; selectedTotals: QuoteTotals }) {
+function formatArticleCount(count: number) {
+  return `${count} ${count === 1 ? "articol" : "articole"}`;
+}
+
+function _ExcelSheetsPanel({ productCatalog, selectedTotals }: { productCatalog: ProductCatalog; selectedTotals: QuoteTotals }) {
   return (
     <>
       <section className="rounded-lg border bg-slate-50 p-4">
@@ -1345,7 +2130,7 @@ function ExcelSheetsPanel({ productCatalog, selectedTotals }: { productCatalog: 
                 <td className="px-2 py-2 text-right">{money(selectedTotals.tileValue)}</td>
               </tr>
               {selectedTotals.systemRows.map((row) => (
-                <tr className="border-t" key={row.name}>
+                <tr className="border-t" key={row.id}>
                   <td className="px-2 py-2">{row.name}</td>
                   <td className="px-2 py-2 text-right">{money(row.priceWithoutVat)}</td>
                   <td className="px-2 py-2 text-right">{money(row.priceWithVat)}</td>
@@ -1498,7 +2283,7 @@ function NumberField({
         name={name}
         step={step}
         type="number"
-        value={value}
+        value={value || ""}
         onChange={(event) => onChange(Math.min(max ?? Number.POSITIVE_INFINITY, parseNumber(event.target.value)))}
       />
     </label>
@@ -1514,7 +2299,7 @@ function NumberEdit({ label, onChange, value }: { label: string; onChange: (valu
         inputMode="decimal"
         min={0}
         type="number"
-        value={value}
+        value={value || ""}
         onChange={(event) => onChange(parseNumber(event.target.value))}
       />
     </label>

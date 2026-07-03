@@ -5,6 +5,7 @@ export type SeriesKey = keyof typeof sheetSeries;
 
 export type CatalogAccessory = {
   description?: string;
+  id?: string;
   name: string;
   priceWithoutVat: number;
   priceWithVat: number;
@@ -33,6 +34,18 @@ export type CustomerInfo = {
   notes: string;
 };
 
+export type QuotePriceOverrides = {
+  accessoryPrices: Record<
+    string,
+    {
+      priceWithoutVat?: number;
+      priceWithVat?: number;
+    }
+  >;
+  sheetPriceWithoutVat?: number;
+  sheetPriceWithVat?: number;
+};
+
 export type QuoteRequest = {
   accessoryQuantities: Record<string, number>;
   auxiliarySheetQuantities: Record<string, Record<string, number>>;
@@ -41,6 +54,7 @@ export type QuoteRequest = {
   id: string;
   labor: number;
   moduleQuantities: Record<string, number>;
+  priceOverrides?: QuotePriceOverrides;
   seriesKey: SeriesKey;
   sheetQuantities: Record<string, number>;
   status: QuoteStatus;
@@ -58,9 +72,10 @@ export type QuoteTotals = {
   }>;
   moduleRows: Array<{ area: number; label: string; length: number; modules: number; quantity: number }>;
   moduleTotalArea: number;
-  sheetRows: Array<{ area: number; length: number; quantity: number; value: number }>;
+  sheetRows: Array<{ area: number; length: number; priceWithoutVat: number; priceWithVat: number; quantity: number; value: number }>;
   systemAfterDiscount: number;
   systemRows: Array<{
+    id: string;
     name: string;
     priceWithoutVat: number;
     priceWithVat: number;
@@ -79,10 +94,179 @@ export type QuoteTotals = {
 export const quoteStorageKey = "nicoroof.quoteRequests.v1";
 export const productCatalogStorageKey = "nicoroof.productCatalog.v1";
 
+const validQuoteStatuses = new Set<QuoteStatus>(["Noua", "Contactat", "Ofertata", "Acceptata", "Respinsa"]);
+const validSeriesKeys = new Set<SeriesKey>(Object.keys(sheetSeries) as SeriesKey[]);
+
+type SaveResult = { ok: true } | { error: string; ok: false };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function safeText(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function safeNonNegativeNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function safeQuantityMap(value: unknown): Record<string, number> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, quantity]) => [key, safeNonNegativeNumber(quantity)] as const)
+      .filter(([, quantity]) => quantity > 0),
+  );
+}
+
+function safeNestedQuantityMap(value: unknown): Record<string, Record<string, number>> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(Object.entries(value).map(([key, quantities]) => [key, safeQuantityMap(quantities)]));
+}
+
+function stableAccessoryId(name: string, index: number) {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `accessory-${slug || index + 1}`;
+}
+
+function getAccessoryId(accessory: CatalogAccessory, index: number) {
+  return accessory.id || stableAccessoryId(accessory.name, index);
+}
+
+export function createCatalogAccessoryId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `accessory-${crypto.randomUUID()}`;
+  }
+
+  return `accessory-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function generateQuoteRequestId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `NM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
+  return `NM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+}
+
 export const defaultProductCatalog: ProductCatalog = {
-  accessories,
+  accessories: accessories.map((accessory, index) => ({
+    ...accessory,
+    id: stableAccessoryId(accessory.name, index),
+  })),
   sheetProduct,
 };
+
+function normalizeAccessory(value: unknown, fallback: CatalogAccessory, index: number): CatalogAccessory | null {
+  const source = isRecord(value) ? value : {};
+  const name = safeText(source.name, fallback.name).trim();
+
+  if (!name) {
+    return null;
+  }
+
+  return {
+    description: safeText(source.description, fallback.description),
+    id: safeText(source.id, fallback.id || stableAccessoryId(name, index)) || stableAccessoryId(name, index),
+    name,
+    priceWithoutVat: safeNonNegativeNumber(source.priceWithoutVat, fallback.priceWithoutVat),
+    priceWithVat: safeNonNegativeNumber(source.priceWithVat, fallback.priceWithVat),
+    unit: safeText(source.unit, fallback.unit).trim() || fallback.unit,
+  };
+}
+
+function normalizeProductCatalog(value: unknown): ProductCatalog {
+  const parsed = isRecord(value) ? value : {};
+  const parsedSheetProduct = isRecord(parsed.sheetProduct) ? parsed.sheetProduct : {};
+  const parsedAccessories = Array.isArray(parsed.accessories) ? parsed.accessories : [];
+  const accessoriesToNormalize = parsedAccessories.length > 0 ? parsedAccessories : defaultProductCatalog.accessories;
+
+  return {
+    accessories: accessoriesToNormalize
+      .map((accessory, index) => normalizeAccessory(accessory, defaultProductCatalog.accessories[index] || defaultProductCatalog.accessories[0], index))
+      .filter((accessory): accessory is CatalogAccessory => Boolean(accessory)),
+    sheetProduct: {
+      description: safeText(parsedSheetProduct.description, defaultProductCatalog.sheetProduct.description),
+      name: safeText(parsedSheetProduct.name, defaultProductCatalog.sheetProduct.name).trim() || defaultProductCatalog.sheetProduct.name,
+      priceWithoutVat: safeNonNegativeNumber(parsedSheetProduct.priceWithoutVat, defaultProductCatalog.sheetProduct.priceWithoutVat),
+      priceWithVat: safeNonNegativeNumber(parsedSheetProduct.priceWithVat, defaultProductCatalog.sheetProduct.priceWithVat),
+      unit: safeText(parsedSheetProduct.unit, defaultProductCatalog.sheetProduct.unit).trim() || defaultProductCatalog.sheetProduct.unit,
+    },
+  };
+}
+
+function safeOptionalNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function normalizePriceOverrides(value: unknown): QuotePriceOverrides {
+  const parsed = isRecord(value) ? value : {};
+  const accessoryPrices = isRecord(parsed.accessoryPrices) ? parsed.accessoryPrices : {};
+
+  return {
+    accessoryPrices: Object.fromEntries(
+      Object.entries(accessoryPrices)
+        .filter(([, override]) => isRecord(override))
+        .map(([key, override]) => {
+          const priceOverride = override as Record<string, unknown>;
+
+          return [
+            key,
+            {
+              priceWithoutVat: safeOptionalNumber(priceOverride.priceWithoutVat),
+              priceWithVat: safeOptionalNumber(priceOverride.priceWithVat),
+            },
+          ];
+        }),
+    ),
+    sheetPriceWithoutVat: safeOptionalNumber(parsed.sheetPriceWithoutVat),
+    sheetPriceWithVat: safeOptionalNumber(parsed.sheetPriceWithVat),
+  };
+}
+
+function normalizeQuoteRequest(value: unknown): QuoteRequest | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const customer = isRecord(value.customer) ? value.customer : {};
+  const seriesKey = safeText(value.seriesKey);
+  const status = safeText(value.status);
+
+  return {
+    accessoryQuantities: safeQuantityMap(value.accessoryQuantities),
+    auxiliarySheetQuantities: safeNestedQuantityMap(value.auxiliarySheetQuantities),
+    createdAt: safeText(value.createdAt, new Date().toISOString()),
+    customer: {
+      address: safeText(customer.address),
+      email: safeText(customer.email),
+      name: safeText(customer.name),
+      notes: safeText(customer.notes),
+      phone: safeText(customer.phone),
+      wantsInstallation: typeof customer.wantsInstallation === "boolean" ? customer.wantsInstallation : false,
+    },
+    id: safeText(value.id, generateQuoteRequestId()) || generateQuoteRequestId(),
+    labor: safeNonNegativeNumber(value.labor),
+    moduleQuantities: safeQuantityMap(value.moduleQuantities),
+    priceOverrides: normalizePriceOverrides(value.priceOverrides),
+    seriesKey: validSeriesKeys.has(seriesKey as SeriesKey) ? (seriesKey as SeriesKey) : "clasic",
+    sheetQuantities: safeQuantityMap(value.sheetQuantities),
+    status: validQuoteStatuses.has(status as QuoteStatus) ? (status as QuoteStatus) : "Noua",
+    systemDiscount: safeNonNegativeNumber(value.systemDiscount),
+    tileDiscount: safeNonNegativeNumber(value.tileDiscount),
+  };
+}
 
 export function calculateQuoteTotals(request: QuoteRequest, catalog: ProductCatalog = defaultProductCatalog): QuoteTotals {
   const selectedSeries = sheetSeries[request.seriesKey];
@@ -90,23 +274,31 @@ export function calculateQuoteTotals(request: QuoteRequest, catalog: ProductCata
   const accessoryQuantities = request.accessoryQuantities || {};
   const auxiliarySheetQuantities = request.auxiliarySheetQuantities || {};
   const moduleQuantities = request.moduleQuantities || {};
+  const priceOverrides = request.priceOverrides || { accessoryPrices: {} };
+  const sheetPriceWithoutVat = priceOverrides.sheetPriceWithoutVat ?? catalog.sheetProduct.priceWithoutVat;
+  const sheetPriceWithVat = priceOverrides.sheetPriceWithVat ?? catalog.sheetProduct.priceWithVat;
   const sheetRows = selectedSeries.lengths.map((length) => {
     const quantity = sheetQuantities[String(length)] || 0;
     const area = length * selectedSeries.usableWidth * quantity;
-    const value = area * catalog.sheetProduct.priceWithVat;
+    const value = area * sheetPriceWithVat;
 
-    return { area, length, quantity, value };
+    return { area, length, priceWithoutVat: sheetPriceWithoutVat, priceWithVat: sheetPriceWithVat, quantity, value };
   });
   const tileArea = sheetRows.reduce((sum, row) => sum + row.area, 0);
   const tileValue = sheetRows.reduce((sum, row) => sum + row.value, 0);
-  const systemRows = catalog.accessories.map((accessory) => {
-    const quantity = accessoryQuantities[accessory.name] || 0;
-    const value = quantity * accessory.priceWithVat;
+  const systemRows = catalog.accessories.map((accessory, index) => {
+    const id = getAccessoryId(accessory, index);
+    const quantity = accessoryQuantities[id] ?? accessoryQuantities[accessory.name] ?? 0;
+    const accessoryPriceOverride = priceOverrides.accessoryPrices?.[id] ?? priceOverrides.accessoryPrices?.[accessory.name] ?? {};
+    const priceWithoutVat = accessoryPriceOverride.priceWithoutVat ?? accessory.priceWithoutVat;
+    const priceWithVat = accessoryPriceOverride.priceWithVat ?? accessory.priceWithVat;
+    const value = quantity * priceWithVat;
 
     return {
+      id,
       name: accessory.name,
-      priceWithoutVat: accessory.priceWithoutVat,
-      priceWithVat: accessory.priceWithVat,
+      priceWithoutVat,
+      priceWithVat,
       quantity,
       unit: accessory.unit,
       value,
@@ -169,9 +361,12 @@ export function createEmptyQuoteRequest(): QuoteRequest {
       phone: "",
       wantsInstallation: false,
     },
-    id: `NM-${Date.now().toString().slice(-6)}`,
+    id: generateQuoteRequestId(),
     labor: 0,
     moduleQuantities: {},
+    priceOverrides: {
+      accessoryPrices: {},
+    },
     seriesKey: "clasic",
     sheetQuantities: {},
     status: "Noua",
@@ -185,20 +380,36 @@ export function getStoredQuoteRequests(): QuoteRequest[] {
     return [];
   }
 
-  const raw = window.localStorage.getItem(quoteStorageKey);
-  if (!raw) {
-    return [];
-  }
-
   try {
-    return JSON.parse(raw) as QuoteRequest[];
+    const raw = window.localStorage.getItem(quoteStorageKey);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((request) => normalizeQuoteRequest(request))
+      .filter((request): request is QuoteRequest => Boolean(request));
   } catch {
     return [];
   }
 }
 
-export function saveStoredQuoteRequests(requests: QuoteRequest[]) {
-  window.localStorage.setItem(quoteStorageKey, JSON.stringify(requests));
+export function saveStoredQuoteRequests(requests: QuoteRequest[]): SaveResult {
+  if (typeof window === "undefined") {
+    return { error: "Stocarea nu este disponibila in acest context.", ok: false };
+  }
+
+  try {
+    window.localStorage.setItem(quoteStorageKey, JSON.stringify(requests));
+    return { ok: true };
+  } catch {
+    return { error: "Nu am putut salva cererile in browser.", ok: false };
+  }
 }
 
 export function getStoredProductCatalog(): ProductCatalog {
@@ -206,23 +417,27 @@ export function getStoredProductCatalog(): ProductCatalog {
     return defaultProductCatalog;
   }
 
-  const raw = window.localStorage.getItem(productCatalogStorageKey);
-  if (!raw) {
-    return defaultProductCatalog;
-  }
-
   try {
-    const parsed = JSON.parse(raw) as Partial<ProductCatalog>;
+    const raw = window.localStorage.getItem(productCatalogStorageKey);
+    if (!raw) {
+      return defaultProductCatalog;
+    }
 
-    return {
-      accessories: Array.isArray(parsed.accessories) ? parsed.accessories : defaultProductCatalog.accessories,
-      sheetProduct: parsed.sheetProduct || defaultProductCatalog.sheetProduct,
-    };
+    return normalizeProductCatalog(JSON.parse(raw));
   } catch {
     return defaultProductCatalog;
   }
 }
 
-export function saveStoredProductCatalog(catalog: ProductCatalog) {
-  window.localStorage.setItem(productCatalogStorageKey, JSON.stringify(catalog));
+export function saveStoredProductCatalog(catalog: ProductCatalog): SaveResult {
+  if (typeof window === "undefined") {
+    return { error: "Stocarea nu este disponibila in acest context.", ok: false };
+  }
+
+  try {
+    window.localStorage.setItem(productCatalogStorageKey, JSON.stringify(normalizeProductCatalog(catalog)));
+    return { ok: true };
+  } catch {
+    return { error: "Nu am putut salva catalogul in browser.", ok: false };
+  }
 }

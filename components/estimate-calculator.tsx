@@ -8,6 +8,7 @@ import { sheetSeries } from "@/lib/offer-data";
 import {
   calculateQuoteTotals,
   createEmptyQuoteRequest,
+  generateQuoteRequestId,
   getStoredProductCatalog,
   getStoredQuoteRequests,
   saveStoredQuoteRequests,
@@ -15,7 +16,7 @@ import {
   type SeriesKey,
 } from "@/lib/quote";
 
-const accessoryCategories = ["Toate", "Accesorii acoperiș", "Sistem pluvial", "Consumabile"] as const;
+const accessoryCategories = ["Toate", "Accesorii acoperiÈ™", "Sistem pluvial", "Consumabile"] as const;
 
 function toNumber(value: string) {
   const parsed = Number.parseFloat(value);
@@ -38,38 +39,38 @@ function formatLength(value: number) {
 
 function formatProductName(name: string) {
   const normalizedNames: Record<string, string> = {
-    "tigla metalica nordic 0,5 mm": "Țiglă metalică Nordic 0,5 mm",
-    "tabla plana": "Tablă plană",
+    "tigla metalica nordic 0,5 mm": "ÈšiglÄƒ metalicÄƒ Nordic 0,5 mm",
+    "tabla plana": "TablÄƒ planÄƒ",
     "dolie 2ml": "Dolie 2 ml",
-    "fereastra mansarda": "Fereastră mansardă",
-    "Laterala margine 2ml": "Laterală margine 2 ml",
-    "laterala mare 21 cm": "Laterală mare 21 cm",
-    "sort strasina": "Șorț streașină",
-    "sort interior": "Șorț interior",
-    "parazapada 2 ml": "Parazăpadă 2 ml",
+    "fereastra mansarda": "FereastrÄƒ mansardÄƒ",
+    "Laterala margine 2ml": "LateralÄƒ margine 2 ml",
+    "laterala mare 21 cm": "LateralÄƒ mare 21 cm",
+    "sort strasina": "È˜orÈ› streaÈ™inÄƒ",
+    "sort interior": "È˜orÈ› interior",
+    "parazapada 2 ml": "ParazÄƒpadÄƒ 2 ml",
     Calcan: "Calcan",
-    "Fixare sub tabla": "Fixare sub tablă",
-    "Coama 2ml": "Coamă 2 ml",
-    "Parazapada cupa": "Parazăpadă cupă",
-    "Suruburi autofiletante 4.8*35": "Șuruburi autofiletante 4,8 x 35",
+    "Fixare sub tabla": "Fixare sub tablÄƒ",
+    "Coama 2ml": "CoamÄƒ 2 ml",
+    "Parazapada cupa": "ParazÄƒpadÄƒ cupÄƒ",
+    "Suruburi autofiletante 4.8*35": "È˜uruburi autofiletante 4,8 x 35",
     "Folie anticondens 120 gr mp": "Folie anticondens 120 g/mp",
     "Jgheab de scurgere 125": "Jgheab de scurgere 125",
     "Burlan de scurgere 090": "Burlan de scurgere 090",
-    "Carlig jgheab 125/210mm": "Cârlig jgheab 125/210 mm",
+    "Carlig jgheab 125/210mm": "CÃ¢rlig jgheab 125/210 mm",
     "colier burlan": "Colier burlan",
     "Capac jgheab 125": "Capac jgheab 125",
-    "Element imbinare jgheab 125": "Element îmbinare jgheab 125",
+    "Element imbinare jgheab 125": "Element Ã®mbinare jgheab 125",
     "Racord jgheab/burlan 125/090": "Racord jgheab/burlan 125/090",
-    "Ramificatie burlan 90 y": "Ramificație burlan 90 Y",
+    "Ramificatie burlan 90 y": "RamificaÈ›ie burlan 90 Y",
     "Cot de 60 de grade 090": "Cot de 60 de grade 090",
-    "Coltar exterior 90 grade 125": "Colțar exterior 90 grade 125",
-    "Coltar interior 90 grade 125": "Colțar interior 90 grade 125",
+    "Coltar exterior 90 grade 125": "ColÈ›ar exterior 90 grade 125",
+    "Coltar interior 90 grade 125": "ColÈ›ar interior 90 grade 125",
     "lambriu  18 mm": "Lambriu 18 mm",
     silicon: "Silicon",
     PRELUNGITOR: "Prelungitor",
-    "capac coama": "Capac coamă",
+    "capac coama": "Capac coamÄƒ",
     "captator dolie": "Captator dolie",
-    Stacheti: "Ștacheți",
+    Stacheti: "È˜tacheÈ›i",
     dibluri: "Dibluri",
     Cuie: "Cuie",
   };
@@ -103,7 +104,7 @@ function getAccessoryCategory(name: string) {
     return "Consumabile";
   }
 
-  return "Accesorii acoperiș";
+  return "Accesorii acoperiÈ™";
 }
 
 export function EstimateCalculator() {
@@ -133,10 +134,10 @@ export function EstimateCalculator() {
     }));
   }
 
-  function updateAccessoryQuantity(name: string, quantity: number) {
+  function updateAccessoryQuantity(id: string, quantity: number) {
     setRequest((current) => ({
       ...current,
-      accessoryQuantities: { ...current.accessoryQuantities, [name]: quantity },
+      accessoryQuantities: { ...current.accessoryQuantities, [id]: quantity },
     }));
   }
 
@@ -149,7 +150,7 @@ export function EstimateCalculator() {
 
   function submitRequest() {
     if (selectedProductCount === 0) {
-      setFormError("Alege cel puțin un produs sau completează o cantitate înainte de trimitere.");
+      setFormError("Alege cel puÈ›in un produs sau completeazÄƒ o cantitate Ã®nainte de trimitere.");
       firstSheetInputRef.current?.focus();
       return;
     }
@@ -157,11 +158,17 @@ export function EstimateCalculator() {
     const finalRequest = {
       ...request,
       createdAt: new Date().toISOString(),
-      id: `NM-${Date.now().toString().slice(-6)}`,
+      id: generateQuoteRequestId(),
       status: "Noua" as const,
     };
     const existing = getStoredQuoteRequests();
-    saveStoredQuoteRequests([finalRequest, ...existing]);
+    const saveResult = saveStoredQuoteRequests([finalRequest, ...existing]);
+
+    if (!saveResult.ok) {
+      setFormError(saveResult.error);
+      return;
+    }
+
     setSubmittedId(finalRequest.id);
     setFormError(null);
     setRequest(createEmptyQuoteRequest());
@@ -170,10 +177,10 @@ export function EstimateCalculator() {
   return (
     <section className="bg-white px-5 py-14 md:px-14" id="calculator">
       <div className="mb-7">
-        <p className="mb-2 text-xs font-bold uppercase text-primary">Cerere ofertă</p>
-        <h2 className="text-balance text-3xl font-bold tracking-normal md:text-5xl">Configurează necesarul pentru acoperiș</h2>
+        <p className="mb-2 text-xs font-bold uppercase text-primary">Cerere ofertÄƒ</p>
+        <h2 className="text-balance text-3xl font-bold tracking-normal md:text-5xl">ConfigureazÄƒ necesarul pentru acoperiÈ™</h2>
         <p className="mt-3 max-w-3xl text-muted-foreground">
-          Alege profilul de țiglă, completează foile și adaugă accesoriile. Cererea ajunge la distribuitor pentru verificare și confirmare.
+          Alege profilul de È›iglÄƒ, completeazÄƒ foile È™i adaugÄƒ accesoriile. Cererea ajunge la distribuitor pentru verificare È™i confirmare.
         </p>
       </div>
 
@@ -191,8 +198,8 @@ export function EstimateCalculator() {
                 <Home className="size-5" />
               </span>
               <div>
-                <h3 className="text-xl font-bold">1. Alege profilul de țiglă</h3>
-                <p className="mt-1 text-sm text-muted-foreground">Formula de calcul se schimbă automat în funcție de profilul ales.</p>
+                <h3 className="text-xl font-bold">1. Alege profilul de È›iglÄƒ</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Formula de calcul se schimbÄƒ automat Ã®n funcÈ›ie de profilul ales.</p>
               </div>
             </div>
 
@@ -233,9 +240,9 @@ export function EstimateCalculator() {
                   <FileSpreadsheet className="size-5" />
                 </span>
                 <div>
-                  <h3 className="text-xl font-bold">2. Completează foile</h3>
+                  <h3 className="text-xl font-bold">2. CompleteazÄƒ foile</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Lățime utilă: {selectedSeries.usableWidth} m. Introdu numărul de bucăți pentru fiecare lungime necesară.
+                    LÄƒÈ›ime utilÄƒ: {selectedSeries.usableWidth} m. Introdu numÄƒrul de bucÄƒÈ›i pentru fiecare lungime necesarÄƒ.
                   </p>
                 </div>
               </div>
@@ -246,7 +253,7 @@ export function EstimateCalculator() {
               {totals.sheetRows.map((row) => (
                 <label className="rounded-lg border bg-slate-50 p-3 text-sm font-semibold text-muted-foreground" key={row.length}>
                   <span className="flex items-center justify-between gap-3">
-                    <span>Foaie de țiglă {formatLength(row.length)} m</span>
+                    <span>Foaie de È›iglÄƒ {formatLength(row.length)} m</span>
                     <span className="text-xs text-foreground">{row.area.toFixed(2)} mp</span>
                   </span>
                   <input
@@ -272,8 +279,8 @@ export function EstimateCalculator() {
                   <PackageCheck className="size-5" />
                 </span>
                 <div>
-                  <h3 className="text-xl font-bold">3. Adaugă accesoriile</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Caută produsul sau filtrează lista pe categorie.</p>
+                  <h3 className="text-xl font-bold">3. AdaugÄƒ accesoriile</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">CautÄƒ produsul sau filtreazÄƒ lista pe categorie.</p>
                 </div>
               </div>
               <label className="flex min-h-11 items-center gap-2 rounded-md border bg-white px-3 text-sm text-muted-foreground focus-within:ring-2 focus-within:ring-ring lg:w-80">
@@ -282,7 +289,7 @@ export function EstimateCalculator() {
                   autoComplete="off"
                   className="w-full bg-transparent outline-none"
                   name="search-accessories"
-                  placeholder="Caută produs..."
+                  placeholder="CautÄƒ produs..."
                   value={accessoryQuery}
                   onChange={(event) => setAccessoryQuery(event.target.value)}
                 />
@@ -324,8 +331,8 @@ export function EstimateCalculator() {
                       name={`accesoriu-${row.name}`}
                       step={row.unit === "mp" || row.unit === "ml" ? 0.1 : 1}
                       type="number"
-                      value={request.accessoryQuantities[row.name] || ""}
-                      onChange={(event) => updateAccessoryQuantity(row.name, toNumber(event.target.value))}
+                      value={request.accessoryQuantities[row.id] ?? request.accessoryQuantities[row.name] ?? ""}
+                      onChange={(event) => updateAccessoryQuantity(row.id, toNumber(event.target.value))}
                     />
                     <strong className="text-right">{money(row.value)} lei</strong>
                   </span>
@@ -340,8 +347,8 @@ export function EstimateCalculator() {
                 <ClipboardList className="size-5" />
               </span>
               <div>
-                <h3 className="text-xl font-bold">4. Date pentru răspuns</h3>
-                <p className="mt-1 text-sm text-muted-foreground">Te contactăm pentru disponibilitate, transport și oferta finală.</p>
+                <h3 className="text-xl font-bold">4. Date pentru rÄƒspuns</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Te contactÄƒm pentru disponibilitate, transport È™i oferta finalÄƒ.</p>
               </div>
             </div>
 
@@ -349,7 +356,7 @@ export function EstimateCalculator() {
               <TextField autoComplete="name" label="Nume client" name="customer-name" value={request.customer.name} onChange={(value) => updateCustomer("name", value)} />
               <TextField autoComplete="tel" inputMode="tel" label="Telefon" name="customer-phone" type="tel" value={request.customer.phone} onChange={(value) => updateCustomer("phone", value)} />
               <TextField autoComplete="email" label="Email" name="customer-email" required={false} spellCheck={false} type="email" value={request.customer.email} onChange={(value) => updateCustomer("email", value)} />
-              <TextField autoComplete="street-address" label="Adresa lucrării" name="customer-address" value={request.customer.address} onChange={(value) => updateCustomer("address", value)} />
+              <TextField autoComplete="street-address" label="Adresa lucrÄƒrii" name="customer-address" value={request.customer.address} onChange={(value) => updateCustomer("address", value)} />
             </div>
 
             <label className="mt-4 flex items-center gap-3 rounded-lg border bg-slate-50 p-4 text-sm font-semibold text-foreground">
@@ -360,15 +367,15 @@ export function EstimateCalculator() {
                 type="checkbox"
                 onChange={(event) => updateCustomer("wantsInstallation", event.target.checked)}
               />
-              Vreau ofertă și pentru montaj
+              Vreau ofertÄƒ È™i pentru montaj
             </label>
 
             <label className="mt-4 grid gap-2 text-sm font-semibold text-muted-foreground">
-              Observații
+              ObservaÈ›ii
               <textarea
                 className="min-h-24 resize-y rounded-md border bg-white px-3 py-3 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 name="notes"
-                placeholder="Ex.: culoare dorită, detalii despre acoperiș, termen estimat..."
+                placeholder="Ex.: culoare doritÄƒ, detalii despre acoperiÈ™, termen estimat..."
                 value={request.customer.notes}
                 onChange={(event) => updateCustomer("notes", event.target.value)}
               />
@@ -380,12 +387,6 @@ export function EstimateCalculator() {
               </div>
             ) : null}
 
-            {submittedId ? (
-              <div className="mt-4 flex items-start gap-3 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950" role="status">
-                <CheckCircle2 className="mt-0.5 size-5 text-primary" />
-                <span>Cererea {submittedId} a fost înregistrată pentru verificare.</span>
-              </div>
-            ) : null}
           </section>
         </div>
 
@@ -395,20 +396,20 @@ export function EstimateCalculator() {
               <ShoppingCart className="size-5" />
             </span>
             <div>
-              <p className="mb-1 text-xs font-bold uppercase text-primary">Cerere curentă</p>
+              <p className="mb-1 text-xs font-bold uppercase text-primary">Cerere curentÄƒ</p>
               <h3 className="text-xl font-bold">Rezumat materiale</h3>
             </div>
           </div>
 
           <div className="mt-5 grid gap-3 text-sm">
-            <SummaryMetric icon={<FileSpreadsheet className="size-4" />} label="Țiglă selectată" value={`${totals.tileArea.toFixed(2)} mp`} />
+            <SummaryMetric icon={<FileSpreadsheet className="size-4" />} label="ÈšiglÄƒ selectatÄƒ" value={`${totals.tileArea.toFixed(2)} mp`} />
             <SummaryMetric icon={<CheckCircle2 className="size-4" />} label="Montaj" value={request.customer.wantsInstallation ? "Da" : "Nu"} />
           </div>
 
           {selectedAccessoryRows.length > 0 ? (
             <div className="mt-5 rounded-lg border bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
-                <strong className="text-sm">Accesorii adăugate</strong>
+                <strong className="text-sm">Accesorii adÄƒugate</strong>
                 <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-primary">
                   {selectedAccessoryRows.length} {selectedAccessoryRows.length === 1 ? "produs" : "produse"}
                 </span>
@@ -436,7 +437,7 @@ export function EstimateCalculator() {
           </div>
 
           <p className="mt-3 rounded-lg border bg-slate-50 p-4 text-sm text-muted-foreground">
-            Distribuitorul confirmă disponibilitatea, transportul și prețul final.
+            Distribuitorul confirmÄƒ disponibilitatea, transportul È™i preÈ›ul final.
           </p>
 
           <Button className="mt-5 w-full" type="submit">
@@ -444,6 +445,26 @@ export function EstimateCalculator() {
           </Button>
         </aside>
       </form>
+
+      {submittedId ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-5 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="quote-success-title">
+          <div className="w-full max-w-xl rounded-lg border bg-white p-6 text-center shadow-soft md:p-8">
+            <span className="mx-auto grid size-14 place-items-center rounded-full bg-teal-50 text-primary">
+              <CheckCircle2 className="size-7" />
+            </span>
+            <h3 className="mt-5 text-2xl font-bold tracking-normal text-foreground md:text-3xl" id="quote-success-title">
+              Cererea dvs. a fost trimisÄƒ
+            </h3>
+            <p className="mt-3 text-base leading-7 text-muted-foreground">
+              Revenim Ã®n cel mai scurt timp cu oferta.
+            </p>
+            <p className="mt-4 text-sm font-semibold text-primary">NumÄƒr cerere: {submittedId}</p>
+            <Button className="mt-6 min-w-36" type="button" onClick={() => setSubmittedId(null)}>
+              ÃŽnchide
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
