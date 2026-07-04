@@ -69,7 +69,7 @@ export default function Home() {
                 </a>
               </div>
               <div className="mt-6 flex flex-wrap gap-2 text-sm font-semibold text-white/85">
-                {["Raspuns rapid", "Oferta verificata", "Livrare nationala"].map((item) => (
+                {["Răspuns rapid", "Ofertă verificată", "Livrare națională"].map((item) => (
                   <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 backdrop-blur" key={item}>
                     <CheckCircle2 className="size-4 text-teal-200" />
                     {item}
