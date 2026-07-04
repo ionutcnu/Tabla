@@ -6,23 +6,29 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "biome lint .",
     "cloudflare:build": "opennextjs-cloudflare build",
     "deploy": "npm run cloudflare:build && wrangler deploy",
     "preview": "npm run cloudflare:build && wrangler dev",
-    "remote": "npm run cloudflare:build && wrangler dev --remote"
+    "remote": "npm run cloudflare:build && wrangler dev --remote",
+    "lint:fix": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "lint:next": "next lint"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.451.0",
+    "motion": "^12.42.2",
     "next": "15.5.19",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.2",
     "@cloudflare/workers-types": "4.20260606.1",
     "@opennextjs/cloudflare": "1.19.11",
     "@types/node": "^22.9.0",
