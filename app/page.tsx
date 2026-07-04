@@ -1,8 +1,7 @@
 import Image from "next/image";
-import { ArrowRight, CheckCircle2, Clock3, FileSpreadsheet, Mail, PackageCheck, Percent, Phone, Truck } from "lucide-react";
+import { ArrowRight, Clock3, FileSpreadsheet, PackageCheck, Percent, Truck } from "lucide-react";
 
 import { EstimateCalculator } from "@/components/estimate-calculator";
-import { FadeInSection, MotionProvider, StaggerDiv, StaggerItemArticle } from "@/components/motion-primitives";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import { company } from "@/lib/offer-data";
@@ -31,11 +30,8 @@ const offerSteps = [
 export default function Home() {
   return (
     <>
-      <MotionProvider>
-        <SiteHeader />
-      </MotionProvider>
+      <SiteHeader />
       <main id="main-content">
-        <MotionProvider>
         <section className="relative grid min-h-[560px] scroll-mt-24 items-center overflow-hidden px-5 py-16 text-white md:px-14" id="top">
           <Image
             priority
@@ -45,10 +41,13 @@ export default function Home() {
             sizes="100vw"
             src="https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?auto=format&fit=crop&w=1800&q=80"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/92 via-slate-950/78 to-slate-950/62 md:bg-gradient-to-r md:from-slate-950/90 md:via-slate-950/68 md:to-slate-950/30" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/68 to-slate-950/30" />
 
           <div className="relative z-10 grid gap-8 lg:grid-cols-[1.35fr_0.65fr] lg:items-end">
             <div className="max-w-3xl">
+              <div className="relative mb-6 h-24 w-32 overflow-hidden rounded-lg border border-white/20 bg-white shadow-soft">
+                <Image alt="Nicoroof Modern logo" className="object-contain p-2" fill sizes="128px" src="/nicoroof-logo.png" />
+              </div>
               <p className="mb-3 text-xs font-bold uppercase text-teal-200">{company.tagline}</p>
               <h1 className="text-balance text-4xl font-bold leading-none tracking-normal md:text-7xl">
                 Cerere de ofertă pentru țiglă metalică și accesorii.
@@ -57,24 +56,16 @@ export default function Home() {
                 Alege profilul potrivit, completează materialele necesare și primești confirmare pentru disponibilitate,
                 transport și preț final.
               </p>
-              <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+              <div className="mt-8 flex flex-wrap gap-3">
                 <Button asChild>
                   <a href="#calculator">
                     Solicită ofertă
                     <ArrowRight className="ml-2 size-4" />
                   </a>
                 </Button>
-                <a className="text-sm font-semibold text-white/85 underline-offset-4 hover:text-white hover:underline" href="#oferta">
-                  Vezi cum funcționează
-                </a>
-              </div>
-              <div className="mt-6 flex flex-wrap gap-2 text-sm font-semibold text-white/85">
-                {["Raspuns rapid", "Oferta verificata", "Livrare nationala"].map((item) => (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-2 backdrop-blur" key={item}>
-                    <CheckCircle2 className="size-4 text-teal-200" />
-                    {item}
-                  </span>
-                ))}
+                <Button asChild variant="outline">
+                  <a href="#oferta">Vezi cum funcționează</a>
+                </Button>
               </div>
             </div>
 
@@ -91,7 +82,7 @@ export default function Home() {
           </div>
         </section>
 
-        <FadeInSection className="bg-secondary px-5 py-14 md:px-14" id="oferta">
+        <section className="bg-secondary px-5 py-14 md:px-14" id="oferta">
           <div className="mb-7">
             <p className="mb-2 text-xs font-bold uppercase text-primary">Cum funcționează</p>
             <h2 className="text-balance text-3xl font-bold tracking-normal md:text-5xl">Pregătim oferta în 3 pași</h2>
@@ -100,52 +91,33 @@ export default function Home() {
               Completezi cantitățile cunoscute, iar oferta este verificată înainte de confirmarea finală.
             </p>
           </div>
-          <StaggerDiv className="relative grid gap-4 md:grid-cols-3 md:before:absolute md:before:left-[16.66%] md:before:right-[16.66%] md:before:top-8 md:before:h-px md:before:bg-border">
-            {offerSteps.map((step, index) => (
-              <StaggerItemArticle className="relative rounded-lg border bg-card p-5 shadow-soft" key={step.title}>
-                <div className="mb-4 flex items-center justify-between gap-4">
-                  <span className="grid size-10 place-items-center rounded-md bg-teal-50 text-primary ring-8 ring-secondary">
-                    <step.icon className="size-5" />
-                  </span>
-                  <span className="text-2xl font-bold text-primary/15">{String(index + 1).padStart(2, "0")}</span>
-                </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            {offerSteps.map((step) => (
+              <article className="rounded-lg border bg-card p-6 shadow-soft" key={step.title}>
+                <span className="mb-5 grid size-12 place-items-center rounded-md bg-teal-50 text-primary">
+                  <step.icon className="size-5" />
+                </span>
                 <h3 className="mb-2 text-lg font-bold">{step.title}</h3>
-                <p className="text-sm leading-6 text-muted-foreground">{step.description}</p>
-              </StaggerItemArticle>
+                <p className="leading-7 text-muted-foreground">{step.description}</p>
+              </article>
             ))}
-          </StaggerDiv>
-        </FadeInSection>
-        </MotionProvider>
+          </div>
+        </section>
 
         <EstimateCalculator />
 
       </main>
 
-      <footer className="border-t bg-white px-5 py-6 md:px-14">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <strong className="block text-sm text-foreground">{company.name}</strong>
-            <span className="mt-1 block max-w-2xl text-sm text-muted-foreground">{company.address}</span>
-          </div>
-          <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-5">
-            <ContactItem icon={<Phone className="size-4" />} label={company.phone} />
-            <ContactItem icon={<Mail className="size-4" />} label={company.email} />
-            <a className="font-semibold text-primary hover:text-primary/80" href="/admin">
-              Admin demo
-            </a>
-          </div>
-        </div>
+      <footer className="flex flex-col justify-between gap-3 border-t px-5 py-6 text-sm text-muted-foreground md:flex-row md:px-14">
+        <span>{company.name}</span>
+        <span>
+          {company.phone} | {company.email}{" "}
+          <a className="font-semibold text-primary" href="/admin">
+            Admin demo
+          </a>
+        </span>
       </footer>
     </>
-  );
-}
-
-function ContactItem({ className, icon, label }: { className?: string; icon: React.ReactNode; label: string }) {
-  return (
-    <span className={`flex min-w-0 items-center gap-2 ${className || ""}`}>
-      <span className="shrink-0 text-primary">{icon}</span>
-      <span className="truncate">{label}</span>
-    </span>
   );
 }
 
