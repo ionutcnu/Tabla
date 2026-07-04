@@ -396,12 +396,6 @@ export function EstimateCalculator() {
               </div>
             ) : null}
 
-            {submittedId ? (
-              <div className="mt-4 flex items-start gap-3 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-950" role="status">
-                <CheckCircle2 className="mt-0.5 size-5 text-primary" />
-                <span>Cererea {submittedId} a fost înregistrată pentru verificare.</span>
-              </div>
-            ) : null}
           </section>
         </div>
 
@@ -458,7 +452,7 @@ export function EstimateCalculator() {
               <span>{selectedProductLabel}</span>
             </div>
             <strong className="mt-2 block text-3xl leading-none text-teal-950">{money(totals.tileValue + totals.systemValue)} lei</strong>
-            <span className="mt-2 block text-xs font-semibold text-teal-900/75">Estimare fara transport si confirmarea disponibilitatii.</span>
+            <span className="mt-2 block text-xs font-semibold text-teal-900/75">Estimare fără transport și confirmarea disponibilității.</span>
           </div>
 
           <p className="mt-3 rounded-lg border bg-slate-50 p-4 text-sm text-muted-foreground">
@@ -480,12 +474,12 @@ export function EstimateCalculator() {
               <CheckCircle2 className="size-7" />
             </span>
             <h3 className="mt-5 text-2xl font-bold tracking-normal text-foreground md:text-3xl" id="quote-success-title">
-              Cererea dvs. a fost trimisa
+              Cererea dvs. a fost trimisă
             </h3>
-            <p className="mt-3 text-base leading-7 text-muted-foreground">Revenim in cel mai scurt timp cu oferta.</p>
-            <p className="mt-4 text-sm font-semibold text-primary">Numar cerere: {submittedId}</p>
+            <p className="mt-3 text-base leading-7 text-muted-foreground">Revenim în cel mai scurt timp cu oferta.</p>
+            <p className="mt-4 text-sm font-semibold text-primary">Număr cerere: {submittedId}</p>
             <Button className="mt-6 min-w-36" type="button" onClick={() => setSubmittedId(null)}>
-              Inchide
+              Închide
             </Button>
           </div>
         </div>
