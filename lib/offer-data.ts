@@ -10,6 +10,9 @@ export const company = {
 export const sheetSeries = {
   clasic: {
     name: "Clasic",
+    imageAlt: "Randare 3D tigla metalica Clasic",
+    imageSrc: "/products/bilka/clasic-card.png",
+    bilkaUrl: "https://www.bilka.ro/tigla-metalica-clasic/",
     category: "Țiglă metalică",
     description: "Profil clasic pentru acoperișuri metalice, calculat cu lățime utilă de 1,20 m.",
     usableWidth: 1.2,
@@ -17,6 +20,9 @@ export const sheetSeries = {
   },
   hellenic: {
     name: "Hellenic",
+    imageAlt: "Randare 3D tigla metalica Hellenic",
+    imageSrc: "/products/bilka/hellenic-card.png",
+    bilkaUrl: "https://www.bilka.ro/tigla-metalica-hellenic/",
     category: "Țiglă metalică",
     description: "Profil de țiglă metalică, calculat cu lățime utilă de 1,21 m.",
     usableWidth: 1.21,
@@ -24,6 +30,9 @@ export const sheetSeries = {
   },
   britanic: {
     name: "Britanic",
+    imageAlt: "Randare 3D tigla metalica Britanic",
+    imageSrc: "/products/bilka/britanic-card.png",
+    bilkaUrl: "https://www.bilka.ro/tigla-metalica-britanic/",
     category: "Țiglă metalică",
     description: "Profil de țiglă metalică, calculat cu aceeași formulă ca Hellenic și Dacic.",
     usableWidth: 1.21,
@@ -31,6 +40,9 @@ export const sheetSeries = {
   },
   dacic: {
     name: "Dacic",
+    imageAlt: "Randare 3D tigla metalica Dacic",
+    imageSrc: "/products/bilka/dacic-card.png",
+    bilkaUrl: "https://www.bilka.ro/tigla-metalica-dacic/",
     category: "Țiglă metalică",
     description: "Profil de țiglă metalică, calculat cu lățime utilă de 1,21 m.",
     usableWidth: 1.21,
@@ -38,6 +50,9 @@ export const sheetSeries = {
   },
   adriatic: {
     name: "Adriatic",
+    imageAlt: "Randare 3D tigla metalica Adriatic",
+    imageSrc: "/products/bilka/adriatic-card.png",
+    bilkaUrl: "https://www.bilka.ro/tigla-metalica-adriatic/",
     category: "Țiglă metalică",
     description: "Profil de țiglă metalică, calculat cu lățime utilă de 1,215 m.",
     usableWidth: 1.215,
