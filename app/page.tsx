@@ -122,15 +122,15 @@ export default function Home() {
       </main>
 
       <footer className="border-t bg-white px-5 py-6 md:px-14">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="min-w-0">
             <strong className="block text-sm text-foreground">{company.name}</strong>
-            <span className="mt-1 block max-w-2xl text-sm text-muted-foreground">{company.address}</span>
+            <span className="mt-1 block max-w-2xl break-words text-sm leading-6 text-muted-foreground">{company.address}</span>
           </div>
-          <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-5">
+          <div className="grid min-w-0 gap-3 text-sm text-muted-foreground sm:grid-cols-2 lg:flex lg:items-center lg:gap-5">
             <ContactItem icon={<Phone className="size-4" />} label={company.phone} />
             <ContactItem icon={<Mail className="size-4" />} label={company.email} />
-            <a className="font-semibold text-primary hover:text-primary/80" href="/admin">
+            <a className="inline-flex min-h-10 w-fit items-center rounded-md border bg-white px-4 font-semibold text-primary transition-colors hover:bg-teal-50 hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:col-span-2 lg:col-span-1" href="/admin">
               Admin demo
             </a>
           </div>
@@ -144,7 +144,7 @@ function ContactItem({ className, icon, label }: { className?: string; icon: Rea
   return (
     <span className={`flex min-w-0 items-center gap-2 ${className || ""}`}>
       <span className="shrink-0 text-primary">{icon}</span>
-      <span className="truncate">{label}</span>
+      <span className="min-w-0 break-words leading-6">{label}</span>
     </span>
   );
 }
