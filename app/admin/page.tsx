@@ -3,11 +3,14 @@
 import {
   ArrowLeft,
   CheckCircle2,
+  Download,
+  ExternalLink,
   FileSpreadsheet,
   FileText,
   ListChecks,
   Mail,
   PackagePlus,
+  Paperclip,
   Plus,
   Save,
   Search,
@@ -15,11 +18,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { company, sheetSeries } from "@/lib/offer-data";
+import { formatFileSize, getQuoteAttachmentFile } from "@/lib/quote-attachments";
 import {
   calculateQuoteTotals,
   createCatalogAccessoryId,
@@ -31,6 +36,7 @@ import {
   saveStoredQuoteRequests,
   type CatalogAccessory,
   type ProductCatalog,
+  type QuoteAttachment,
   type QuoteRequest,
   type QuoteStatus,
   type QuoteTotals,
@@ -593,6 +599,32 @@ function publicAssetUrl(path: string) {
   return `${window.location.origin}${normalizedPath}`;
 }
 
+async function openQuoteAttachment(attachment: QuoteAttachment, download = false) {
+  try {
+    const file = await getQuoteAttachmentFile(attachment.id);
+
+    if (!file) {
+      window.alert("Fisierul nu mai este disponibil in browser.");
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+
+    if (download) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.name;
+      link.click();
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Nu am putut deschide fisierul.");
+  }
+}
+
 export default function AdminPage() {
   const [activeSection, setActiveSection] = useState<AdminSection>("offers");
   const [requests, setRequests] = useState<QuoteRequest[]>([]);
@@ -914,8 +946,15 @@ function RequestsList({
         </label>
       </div>
 
-      <div className="grid gap-3 p-4">
-        {filteredRequests.map((request) => {
+      {filteredRequests.length === 0 ? (
+        <div className="m-4 rounded-lg border border-dashed bg-slate-50 p-6 text-center">
+          <ListChecks className="mx-auto size-8 text-primary" />
+          <strong className="mt-3 block text-lg text-foreground">{query ? "Nu exista cereri pentru cautarea curenta." : "Nu există cereri încă."}</strong>
+          <p className="mt-1 text-sm text-muted-foreground">{query ? "Sterge cautarea sau verifica termenul introdus." : "Cererile trimise din calculator vor aparea aici."}</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 p-4">
+          {filteredRequests.map((request) => {
           const totals = calculateQuoteTotals(request, productCatalog);
           return (
             <button
@@ -933,7 +972,15 @@ function RequestsList({
                     {request.id} | {request.customer.address || "Adresa necompletata"}
                   </span>
                 </div>
-                <span className="w-fit rounded-full border bg-white px-2.5 py-1 text-xs font-bold">{request.status}</span>
+                <span className="flex shrink-0 flex-wrap justify-end gap-2">
+                  {request.attachments.length > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border bg-white px-2.5 py-1 text-xs font-bold text-primary">
+                      <Paperclip className="size-3.5" />
+                      {request.attachments.length} fisiere
+                    </span>
+                  ) : null}
+                  <span className="w-fit rounded-full border bg-white px-2.5 py-1 text-xs font-bold">{request.status}</span>
+                </span>
               </div>
               <div className="mt-4 grid gap-3 text-sm md:grid-cols-4">
                 <Metric label="Foi" value={`${totals.tileArea.toFixed(2)} mp`} />
@@ -943,8 +990,9 @@ function RequestsList({
               </div>
             </button>
           );
-        })}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -976,6 +1024,21 @@ function OrderDetailsModal({
   const [accessorySearch, setAccessorySearch] = useState("");
   const [accessoryVisibleCount, setAccessoryVisibleCount] = useState(20);
   const [accessoryPickerOpen, setAccessoryPickerOpen] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<{ attachment: QuoteAttachment; url: string } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewAttachment) {
+        URL.revokeObjectURL(previewAttachment.url);
+      }
+    };
+  }, [previewAttachment]);
+
+  useEffect(() => {
+    if (!open) {
+      setPreviewAttachment(null);
+    }
+  }, [open]);
 
   if (!open) {
     return null;
@@ -1088,22 +1151,60 @@ function OrderDetailsModal({
     }));
   }
 
+  async function openAttachmentPreview(attachment: QuoteAttachment) {
+    if (!attachment.type.startsWith("image/")) {
+      await openQuoteAttachment(attachment);
+      return;
+    }
+
+    try {
+      const file = await getQuoteAttachmentFile(attachment.id);
+
+      if (!file) {
+        window.alert("Fisierul nu mai este disponibil in browser.");
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      setPreviewAttachment((current) => {
+        if (current) {
+          URL.revokeObjectURL(current.url);
+        }
+
+        return { attachment, url };
+      });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Nu am putut deschide fisierul.");
+    }
+  }
+
+  function closeAttachmentPreview() {
+    setPreviewAttachment((current) => {
+      if (current) {
+        URL.revokeObjectURL(current.url);
+      }
+
+      return null;
+    });
+  }
+
   return (
-    <div className="fixed inset-0 z-50 grid bg-slate-950/60 p-3 md:p-6" role="dialog" aria-modal="true" aria-labelledby="order-modal-title">
-      <div className="min-h-0 overflow-hidden rounded-lg bg-white shadow-soft">
-        <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
-          <div>
+    <>
+    <div className="fixed inset-0 z-50 grid bg-slate-950/60 p-0 sm:p-3 md:p-6" role="dialog" aria-modal="true" aria-labelledby="order-modal-title">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white shadow-soft sm:rounded-lg">
+        <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5 sm:py-4">
+          <div className="min-w-0">
             <p className="mb-1 text-xs font-bold uppercase text-primary">Detalii comanda</p>
-            <h2 className="text-2xl font-bold" id="order-modal-title">
+            <h2 className="break-words text-xl font-bold sm:text-2xl" id="order-modal-title">
               {selectedRequest.id} - {selectedRequest.customer.name || "Client fara nume"}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {formattedCreatedAt} | {profile.name} | {selectedTotals.totalWithLabor ? `${money(selectedTotals.totalWithLabor)} lei` : "fara valoare"}
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0 sm:flex-wrap sm:justify-end">
             <Button
-              className="border-slate-300 text-foreground hover:bg-slate-50"
+              className="min-h-10 border-slate-300 px-3 text-foreground hover:bg-slate-50"
               type="button"
               variant="outline"
               onClick={() => printWarehouseSheet(selectedRequest, selectedTotals, productCatalog)}
@@ -1112,7 +1213,7 @@ function OrderDetailsModal({
               Fisa depozit
             </Button>
             <Button
-              className="border-slate-300 text-foreground hover:bg-slate-50"
+              className="min-h-10 border-slate-300 px-3 text-foreground hover:bg-slate-50"
               type="button"
               variant="outline"
               onClick={() => printOfferSheet(selectedRequest, selectedTotals, productCatalog)}
@@ -1126,7 +1227,7 @@ function OrderDetailsModal({
             </Button>
             <button
               aria-label="Inchide detaliile comenzii"
-              className="grid size-11 place-items-center rounded-md border bg-white text-foreground hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="grid min-h-10 place-items-center rounded-md border bg-white text-foreground hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-11"
               type="button"
               onClick={onClose}
             >
@@ -1135,7 +1236,7 @@ function OrderDetailsModal({
           </div>
         </div>
 
-        <div className="max-h-[calc(100vh-8rem)] overflow-y-auto overscroll-contain p-5 pb-10">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-24 sm:p-5 sm:pb-10">
           <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
             <aside className="grid gap-5 xl:sticky xl:top-0 xl:self-start">
               <section className="rounded-lg border bg-slate-50 p-4">
@@ -1163,6 +1264,46 @@ function OrderDetailsModal({
                   <InfoLine icon={<CheckCircle2 className="size-4" />} label="Data cerere" value={formattedCreatedAt} />
                 </div>
               </section>
+
+              {selectedRequest.attachments.length > 0 ? (
+                <section className="rounded-lg border bg-white p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h3 className="font-bold">Atasamente client</h3>
+                    <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-bold text-primary">{selectedRequest.attachments.length}</span>
+                  </div>
+                  <ul className="grid gap-2">
+                    {selectedRequest.attachments.map((attachment) => (
+                      <li className="rounded-md border bg-slate-50 p-3" key={attachment.id}>
+                        <div className="flex items-start gap-2">
+                          <Paperclip className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <span className="min-w-0">
+                            <strong className="block truncate text-sm text-foreground">{attachment.name}</strong>
+                            <span className="block text-xs text-muted-foreground">{formatFileSize(attachment.size)}</span>
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button
+                            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            type="button"
+                            onClick={() => void openAttachmentPreview(attachment)}
+                          >
+                            <ExternalLink className="size-3.5" />
+                            Deschide
+                          </button>
+                          <button
+                            className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border bg-white px-2 text-xs font-semibold text-foreground transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            type="button"
+                            onClick={() => void openQuoteAttachment(attachment, true)}
+                          >
+                            <Download className="size-3.5" />
+                            Descarca
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
 
               <section className="rounded-lg border bg-white p-4">
                 <h3 className="mb-4 font-bold">Administrare oferta</h3>
@@ -1587,6 +1728,44 @@ function OrderDetailsModal({
         </div>
       </div>
     </div>
+    {previewAttachment ? (
+      <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 p-4" role="dialog" aria-modal="true" aria-label={`Previzualizare ${previewAttachment.attachment.name}`}>
+        <button className="absolute inset-0 cursor-default" type="button" aria-label="Inchide previzualizarea" onClick={closeAttachmentPreview} />
+        <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border bg-white shadow-soft">
+          <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+            <div className="min-w-0">
+              <strong className="block truncate text-sm">{previewAttachment.attachment.name}</strong>
+              <span className="text-xs text-muted-foreground">{formatFileSize(previewAttachment.attachment.size)}</span>
+            </div>
+            <button
+              className="grid size-10 shrink-0 place-items-center rounded-md border bg-white text-foreground hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              type="button"
+              aria-label="Inchide"
+              onClick={closeAttachmentPreview}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <div className="grid min-h-0 place-items-center overflow-auto bg-slate-100 p-3">
+            <Image
+              className="h-auto max-h-[70vh] w-auto max-w-full object-contain"
+              alt={previewAttachment.attachment.name}
+              height={900}
+              src={previewAttachment.url}
+              unoptimized
+              width={1200}
+            />
+          </div>
+          <div className="flex justify-end gap-2 border-t px-4 py-3">
+            <Button className="min-h-10" type="button" variant="outline" onClick={() => void openQuoteAttachment(previewAttachment.attachment, true)}>
+              <Download className="mr-2 size-4" />
+              Descarca
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
 

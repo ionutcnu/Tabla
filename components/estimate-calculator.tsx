@@ -1,11 +1,12 @@
 "use client";
 
 import Image from "next/image";
-import { CheckCircle2, ClipboardList, ExternalLink, FileSpreadsheet, Home, Minus, PackageCheck, Pencil, Plus, Search, ShoppingCart, X } from "lucide-react";
+import { CheckCircle2, ClipboardList, ExternalLink, FileSpreadsheet, Home, Minus, PackageCheck, Paperclip, Pencil, Plus, Search, ShoppingCart, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { sheetSeries } from "@/lib/offer-data";
+import { createQuoteAttachment, formatFileSize, quoteAttachmentAccept, saveQuoteAttachmentFiles, validateQuoteAttachment } from "@/lib/quote-attachments";
 import {
   calculateQuoteTotals,
   createEmptyQuoteRequest,
@@ -21,6 +22,7 @@ const accessoryCategories = ["Toate", "Accesorii generale", "Accesorii acoperiș
 type AccessoryProductCategory = Exclude<(typeof accessoryCategories)[number], "Toate">;
 type AccessoryImage = { alt: string; src: string };
 type SubmittedSummary = {
+  attachmentCount: number;
   id: string;
   items: Array<{
     label: string;
@@ -29,6 +31,10 @@ type SubmittedSummary = {
     value: number;
   }>;
   totalValue: number;
+};
+type SelectedAttachmentFile = {
+  file: File;
+  id: string;
 };
 
 const accessoryImagesByName: Record<string, AccessoryImage> = {
@@ -178,6 +184,14 @@ function getAccessoryImage(name: string) {
   return accessoryImagesByName[normalized] ?? null;
 }
 
+function createSelectedAttachmentFileId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 const dialogFocusableSelector = [
   "a[href]",
   "button:not([disabled])",
@@ -323,6 +337,8 @@ export function EstimateCalculator() {
   const [accessoryQuery, setAccessoryQuery] = useState("");
   const [activeAccessoryCategory, setActiveAccessoryCategory] = useState<(typeof accessoryCategories)[number]>("Toate");
   const [accessoryEditorOpen, setAccessoryEditorOpen] = useState(false);
+  const [mobileSummaryVisible, setMobileSummaryVisible] = useState(false);
+  const [selectedAttachmentFiles, setSelectedAttachmentFiles] = useState<SelectedAttachmentFile[]>([]);
   const [productCatalog] = useState(() => getStoredProductCatalog());
   const firstSheetInputRef = useRef<HTMLInputElement | null>(null);
   const summaryRef = useRef<HTMLElement | null>(null);
@@ -369,6 +385,24 @@ export function EstimateCalculator() {
   );
   useDialogBehavior(Boolean(submittedSummary), successDialogRef, () => setSubmittedSummary(null), calculatorFormRef);
 
+  useEffect(() => {
+    const form = calculatorFormRef.current;
+
+    if (!form || typeof IntersectionObserver === "undefined") {
+      setMobileSummaryVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => setMobileSummaryVisible(entry.isIntersecting), {
+      rootMargin: "-80px 0px -25% 0px",
+      threshold: 0,
+    });
+
+    observer.observe(form);
+
+    return () => observer.disconnect();
+  }, []);
+
   function updateSheetQuantity(length: number, quantity: number) {
     setRequest((current) => ({
       ...current,
@@ -394,20 +428,63 @@ export function EstimateCalculator() {
     }));
   }
 
-  function submitRequest() {
+  function addAttachmentFiles(files: FileList | null) {
+    if (!files) {
+      return;
+    }
+
+    const acceptedFiles: SelectedAttachmentFile[] = [];
+    const errors: string[] = [];
+
+    for (const file of Array.from(files)) {
+      const error = validateQuoteAttachment(file);
+
+      if (error) {
+        errors.push(`${file.name}: ${error}`);
+      } else {
+        acceptedFiles.push({ file, id: createSelectedAttachmentFileId() });
+      }
+    }
+
+    if (acceptedFiles.length > 0) {
+      setSelectedAttachmentFiles((current) => [...current, ...acceptedFiles]);
+    }
+
+    setFormError(errors[0] || null);
+  }
+
+  function removeAttachmentFile(idToRemove: string) {
+    setSelectedAttachmentFiles((current) => current.filter((attachment) => attachment.id !== idToRemove));
+  }
+
+  async function submitRequest() {
     if (selectedProductCount === 0) {
       setFormError("Alege cel puțin un produs sau completează o cantitate înainte de trimitere.");
       firstSheetInputRef.current?.focus();
       return;
     }
 
+    const requestId = generateQuoteRequestId();
+    const attachmentEntries = selectedAttachmentFiles.map((attachment) => ({
+      file: attachment.file,
+      metadata: createQuoteAttachment(attachment.file, requestId),
+    }));
     const finalRequest = {
       ...request,
+      attachments: attachmentEntries.map((attachment) => attachment.metadata),
       createdAt: new Date().toISOString(),
-      id: generateQuoteRequestId(),
+      id: requestId,
       status: "Noua" as const,
     };
     const existing = getStoredQuoteRequests();
+
+    try {
+      await saveQuoteAttachmentFiles(finalRequest.id, attachmentEntries);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Nu am putut salva atasamentele.");
+      return;
+    }
+
     const saveResult = saveStoredQuoteRequests([finalRequest, ...existing]);
 
     if (!saveResult.ok) {
@@ -416,6 +493,7 @@ export function EstimateCalculator() {
     }
 
     setSubmittedSummary({
+      attachmentCount: finalRequest.attachments.length,
       id: finalRequest.id,
       items: [
         ...totals.sheetRows
@@ -436,12 +514,13 @@ export function EstimateCalculator() {
       totalValue: totals.tileValue + totals.systemValue,
     });
     setFormError(null);
+    setSelectedAttachmentFiles([]);
     setRequest(createEmptyQuoteRequest());
   }
 
   return (
-    <section className="scroll-mt-24 bg-white px-5 pb-28 pt-10 md:px-14 xl:pb-10" id="calculator">
-      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <section className="w-full max-w-full scroll-mt-24 bg-white px-5 pb-28 pt-10 md:px-14 xl:pb-10" id="calculator">
+      <div className="mb-5 flex min-w-0 flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="mb-2 text-xs font-bold uppercase text-primary">Cerere ofertă</p>
           <h2 className="text-balance text-3xl font-bold tracking-normal md:text-5xl">Configurează necesarul</h2>
@@ -452,15 +531,15 @@ export function EstimateCalculator() {
       </div>
 
       <form
-        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]"
+        className="grid w-full max-w-full min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]"
         ref={calculatorFormRef}
         onSubmit={(event) => {
           event.preventDefault();
-          submitRequest();
+          void submitRequest();
         }}
       >
-        <div className="grid gap-6">
-          <section className="rounded-lg border bg-card p-4 shadow-soft md:p-5">
+        <div className="grid min-w-0 gap-6">
+          <section className="min-w-0 rounded-lg border bg-card p-4 shadow-soft md:p-5">
             <div className="mb-4 flex items-start gap-3">
               <span className="grid size-9 shrink-0 place-items-center rounded-md bg-teal-50 text-primary">
                 <Home className="size-4" />
@@ -471,13 +550,13 @@ export function EstimateCalculator() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {Object.entries(sheetSeries).map(([key, series]) => {
                 const selected = request.seriesKey === key;
 
                 return (
                   <article
-                    className={`flex min-h-44 flex-col rounded-lg border p-3 transition-all ${
+                    className={`flex min-h-44 min-w-0 flex-col rounded-lg border p-3 transition-all ${
                       selected ? "border-primary bg-teal-50 shadow-[inset_0_0_0_1px_hsl(var(--primary))]" : "bg-white hover:border-slate-300 hover:bg-slate-50"
                     }`}
                     key={key}
@@ -522,7 +601,7 @@ export function EstimateCalculator() {
             </div>
           </section>
 
-          <section className="rounded-lg border bg-card p-4 shadow-soft md:p-5">
+          <section className="min-w-0 rounded-lg border bg-card p-4 shadow-soft md:p-5">
             <div className="mb-4 flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-md bg-teal-50 text-primary">
@@ -563,7 +642,7 @@ export function EstimateCalculator() {
             </div>
           </section>
 
-          <section className="rounded-lg border bg-card p-4 shadow-soft md:p-5">
+          <section className="min-w-0 rounded-lg border bg-card p-4 shadow-soft md:p-5">
             <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex items-start gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-md bg-teal-50 text-primary">
@@ -603,13 +682,13 @@ export function EstimateCalculator() {
             </div>
 
             {filteredAccessoryRows.length > 0 ? (
-              <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+              <div className="grid min-w-0 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
                 {filteredAccessoryRows.map((row) => {
                   const category = getAccessoryCategory(row.name);
                   const accessoryImage = getAccessoryImage(row.name);
 
                   return (
-                    <label className="rounded-lg border bg-white p-3 text-sm" key={row.name}>
+                    <label className="min-w-0 rounded-lg border bg-white p-3 text-sm" key={row.name}>
                       <span className={`grid gap-3 ${accessoryImage ? "grid-cols-[5rem_minmax(0,1fr)]" : ""}`}>
                         {accessoryImage ? (
                           <span className="relative block h-20 overflow-hidden">
@@ -672,7 +751,7 @@ export function EstimateCalculator() {
             )}
           </section>
 
-          <section className="rounded-lg border bg-card p-4 shadow-soft md:p-5">
+          <section className="min-w-0 rounded-lg border bg-card p-4 shadow-soft md:p-5">
             <div className="mb-4 flex items-start gap-3">
               <span className="grid size-9 shrink-0 place-items-center rounded-md bg-teal-50 text-primary">
                 <ClipboardList className="size-4" />
@@ -712,6 +791,54 @@ export function EstimateCalculator() {
               />
             </label>
 
+            <div className="mt-3 rounded-lg border bg-slate-50 p-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="flex min-w-0 items-start gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-md bg-white text-primary">
+                    <Paperclip className="size-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <strong className="block text-sm text-foreground">Atasamente</strong>
+                    <span className="block text-xs leading-5 text-muted-foreground">Fisiere acceptate: PDF, JPG si PNG, maximum 10MB / fisier.</span>
+                  </span>
+                </span>
+                <label className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-md border bg-white px-3 text-sm font-semibold text-primary transition-colors hover:bg-teal-50 focus-within:ring-2 focus-within:ring-ring">
+                  Adauga fisiere
+                  <input
+                    className="sr-only"
+                    accept={quoteAttachmentAccept}
+                    multiple
+                    type="file"
+                    onChange={(event) => {
+                      addAttachmentFiles(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+
+              {selectedAttachmentFiles.length > 0 ? (
+                <ul className="mt-3 grid gap-2">
+                  {selectedAttachmentFiles.map((attachment) => (
+                    <li className="flex items-center justify-between gap-3 rounded-md border bg-white px-3 py-2 text-sm" key={attachment.id}>
+                      <span className="min-w-0">
+                        <strong className="block truncate text-foreground">{attachment.file.name}</strong>
+                        <span className="text-xs text-muted-foreground">{formatFileSize(attachment.file.size)}</span>
+                      </span>
+                      <button
+                        className="grid size-9 shrink-0 place-items-center rounded-md border bg-white text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        type="button"
+                        aria-label={`Elimina ${attachment.file.name}`}
+                        onClick={() => removeAttachmentFile(attachment.id)}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+
             {formError ? (
               <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-900" role="alert">
                 {formError}
@@ -721,7 +848,7 @@ export function EstimateCalculator() {
           </section>
         </div>
 
-        <aside className="rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-24 xl:self-start" ref={summaryRef} aria-live="polite">
+        <aside className="min-w-0 rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-24 xl:self-start" ref={summaryRef} aria-live="polite">
           <div className="flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-md bg-teal-50 text-primary">
               <ShoppingCart className="size-5" />
@@ -805,7 +932,11 @@ export function EstimateCalculator() {
           </div>
         </aside>
 
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 px-4 py-3 shadow-soft backdrop-blur xl:hidden">
+        <div
+          className={`fixed inset-x-0 bottom-0 z-40 border-t bg-white/95 px-4 py-3 shadow-soft backdrop-blur transition-transform xl:hidden ${
+            mobileSummaryVisible ? "translate-y-0" : "pointer-events-none translate-y-full"
+          }`}
+        >
           <div className="mx-auto grid max-w-2xl grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-muted-foreground">Total materiale</span>
@@ -968,6 +1099,10 @@ export function EstimateCalculator() {
                   ))}
                 </ol>
               </div>
+              <span className="flex items-center justify-between gap-3 border-t pt-1.5 text-sm">
+                <span className="font-semibold text-foreground">Atasamente</span>
+                <strong className="text-teal-950">{submittedSummary.attachmentCount} fisiere</strong>
+              </span>
               <span className="flex items-center justify-between gap-3 border-t pt-1.5 text-sm">
                 <span className="font-semibold text-foreground">Total estimat</span>
                 <strong className="text-teal-950">{money(submittedSummary.totalValue)} lei</strong>

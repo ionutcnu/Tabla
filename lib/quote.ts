@@ -46,8 +46,17 @@ export type QuotePriceOverrides = {
   sheetPriceWithVat?: number;
 };
 
+export type QuoteAttachment = {
+  createdAt: string;
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+};
+
 export type QuoteRequest = {
   accessoryQuantities: Record<string, number>;
+  attachments: QuoteAttachment[];
   auxiliarySheetQuantities: Record<string, Record<string, number>>;
   createdAt: string;
   customer: CustomerInfo;
@@ -129,6 +138,23 @@ function safeNestedQuantityMap(value: unknown): Record<string, Record<string, nu
   }
 
   return Object.fromEntries(Object.entries(value).map(([key, quantities]) => [key, safeQuantityMap(quantities)]));
+}
+
+function safeAttachments(value: unknown): QuoteAttachment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isRecord)
+    .map((attachment) => ({
+      createdAt: safeText(attachment.createdAt, new Date().toISOString()),
+      id: safeText(attachment.id),
+      name: safeText(attachment.name),
+      size: safeNonNegativeNumber(attachment.size),
+      type: safeText(attachment.type),
+    }))
+    .filter((attachment) => attachment.id && attachment.name && attachment.size > 0);
 }
 
 function stableAccessoryId(name: string, index: number) {
@@ -245,6 +271,7 @@ function normalizeQuoteRequest(value: unknown): QuoteRequest | null {
 
   return {
     accessoryQuantities: safeQuantityMap(value.accessoryQuantities),
+    attachments: safeAttachments(value.attachments),
     auxiliarySheetQuantities: safeNestedQuantityMap(value.auxiliarySheetQuantities),
     createdAt: safeText(value.createdAt, new Date().toISOString()),
     customer: {
@@ -350,6 +377,7 @@ export function calculateQuoteTotals(request: QuoteRequest, catalog: ProductCata
 export function createEmptyQuoteRequest(): QuoteRequest {
   return {
     accessoryQuantities: {},
+    attachments: [],
     auxiliarySheetQuantities: {},
     createdAt: new Date().toISOString(),
     customer: {
